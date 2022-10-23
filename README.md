@@ -8,7 +8,7 @@ The project is still at its early stages and will undergo drastic changes.
 
 ## Project structure
 
-metamc is split into 2 parts.
+metamc is split into 2 parts, both of which are written in Rust.
 
 ### libmcmeta
 
@@ -22,6 +22,29 @@ downloading existing metadata files (and in some cases, extract metadata from
 modloader installers) and then either serving these metadata files or
 generating them for usage somewhere else (like GitHub Pages). It is licensed
 under GPL-3.0-only.
+
+#### How to run this
+
+Since no binaries are released yet, you will have to clone and compile this
+repository yourself. Make sure you have Rust installed and then run:
+
+```sh
+git clone https://github.com/PrismLauncher/mcmeta.git
+cd mcmeta/mcmeta
+
+export RUST_LOG=INFO
+export MCMETA_BIND_ADDRESS=127.0.0.1:9988
+export MCMETA_META_DIRECTORY=../meta
+cargo run
+```
+
+#### Endpoints
+
+The following endpoints are currently implemented:
+
+- `GET /raw/mojang` for the Mojang version manifest, which contains all
+versions
+- `GET /raw/mojang/:version` for a specific Minecraft version, if it exists
 
 ## Goals
 
