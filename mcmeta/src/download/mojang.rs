@@ -1,5 +1,5 @@
 use custom_error::custom_error;
-use libmcmeta::models::mojang::{MojangVersionManifest, MinecraftVersion};
+use libmcmeta::models::mojang::{MinecraftVersion, MojangVersionManifest};
 use serde::Deserialize;
 
 custom_error! {pub MojangMetadataError
@@ -23,9 +23,8 @@ impl DownloadConfig {
         let config = config::Config::builder()
             .add_source(config::Environment::with_prefix("MCMETA_MOJANG"))
             .build()?;
-        
-            config.try_deserialize::<'_, Self>()
-                .map_err(Into::into)
+
+        config.try_deserialize::<'_, Self>().map_err(Into::into)
     }
 }
 
@@ -40,11 +39,13 @@ pub async fn load_manifest() -> Result<MojangVersionManifest, MojangMetadataErro
         .error_for_status()?
         .json::<MojangVersionManifest>()
         .await?;
-    
+
     Ok(response)
 }
 
-pub async fn load_version_manifest(version_url: &str) -> Result<MinecraftVersion, MojangMetadataError> {
+pub async fn load_version_manifest(
+    version_url: &str,
+) -> Result<MinecraftVersion, MojangMetadataError> {
     let client = reqwest::Client::new();
 
     let response = client
@@ -54,6 +55,6 @@ pub async fn load_version_manifest(version_url: &str) -> Result<MinecraftVersion
         .error_for_status()?
         .json::<MinecraftVersion>()
         .await?;
-    
+
     Ok(response)
 }
