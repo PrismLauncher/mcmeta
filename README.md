@@ -56,7 +56,7 @@ Eventually, mcmeta should implement at least the following goals:
   - [ ] Liteloader
   - [ ] Fabric
   - [ ] Quilt
-- Storing metadata
+- [ ] Storing metadata
   - [x] JSON
   - [ ] Database
 - [ ] Offering metadata
