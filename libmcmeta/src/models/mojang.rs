@@ -1,6 +1,6 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MojangVersionManifest {
     /// The latest version of Minecraft.
@@ -10,7 +10,7 @@ pub struct MojangVersionManifest {
 }
 
 /// The latest version of Minecraft.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MojangVersionManifestLatest {
     /// The latest release version of Minecraft.
@@ -20,7 +20,7 @@ pub struct MojangVersionManifestLatest {
 }
 
 /// A version of Minecraft.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MojangVersionManifestVersion {
     /// The ID of the version.
@@ -38,7 +38,7 @@ pub struct MojangVersionManifestVersion {
     pub compliance_level: i32,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct AssetIndex {
     pub id: String,
@@ -48,7 +48,7 @@ pub struct AssetIndex {
     pub url: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionDownload {
     pub sha1: String,
@@ -56,21 +56,21 @@ pub struct VersionDownload {
     pub url: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionDownloads {
     pub client: VersionDownload,
     pub server: Option<VersionDownload>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct JavaVersion {
     pub component: String,
     pub major_version: i32,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLibraryDownloadInfo {
     pub path: String,
@@ -79,7 +79,7 @@ pub struct VersionLibraryDownloadInfo {
     pub url: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLibraryClassifiers {
     pub javadoc: Option<VersionLibraryDownloadInfo>,
@@ -92,7 +92,7 @@ pub struct VersionLibraryClassifiers {
     pub sources: Option<VersionLibraryDownloadInfo>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLibraryNatives {
     pub linux: Option<String>,
@@ -100,20 +100,20 @@ pub struct VersionLibraryNatives {
     pub windows: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLibraryDownloads {
     pub artifact: Option<VersionLibraryDownloadInfo>,
     pub classifiers: Option<VersionLibraryClassifiers>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLibraryExtract {
     pub exclude: Vec<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLibrary {
     pub name: String,
@@ -123,7 +123,7 @@ pub struct VersionLibrary {
     pub rules: Option<Vec<ManifestRule>>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestRule {
     pub action: String,
@@ -131,14 +131,14 @@ pub struct ManifestRule {
     pub features: Option<ManifestRuleFeatures>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestRuleFeatures {
     pub is_demo_user: Option<bool>,
     pub has_custom_resolution: Option<bool>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestRuleOS {
     pub name: Option<String>,
@@ -146,13 +146,13 @@ pub struct ManifestRuleOS {
     pub arch: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLogging {
     pub client: VersionLoggingClient,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLoggingClient {
     pub argument: String,
@@ -161,7 +161,7 @@ pub struct VersionLoggingClient {
     pub logging_type: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionLoggingClientFile {
     pub id: String,
@@ -170,35 +170,35 @@ pub struct VersionLoggingClientFile {
     pub url: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 pub enum VersionArgument {
     String(String),
     Object(VersionArgumentObject),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 pub enum VersionArgumentValue {
     String(String),
     Array(Vec<String>),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionArgumentObject {
     pub rules: Vec<ManifestRule>,
     pub value: VersionArgumentValue,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionArguments {
     pub game: Vec<VersionArgument>,
     pub jvm: Vec<VersionArgument>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MinecraftVersion {
     pub asset_index: AssetIndex,
@@ -244,7 +244,11 @@ mod tests {
                     &std::fs::read_to_string(path).unwrap(),
                 );
                 if let Err(e) = version {
-                    panic!("Failed to deserialize version {}: {:?}", entry.file_name().to_str().unwrap(), e);
+                    panic!(
+                        "Failed to deserialize version {}: {:?}",
+                        entry.file_name().to_str().unwrap(),
+                        e
+                    );
                 }
             }
         }

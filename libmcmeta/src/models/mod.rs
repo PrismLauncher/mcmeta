@@ -1,6 +1,6 @@
-use std::{str::FromStr, fmt::Display};
+use std::{fmt::Display, str::FromStr};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub mod mojang;
 
@@ -9,7 +9,7 @@ custom_error! { pub ModelError
 }
 
 /// A Gradle specifier.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct GradleSpecifier {
     /// Group of the artifact.
     pub group: String,
@@ -48,7 +48,7 @@ impl GradleSpecifier {
     pub fn base(&self) -> String {
         format!(
             "{}/{}/{}",
-            self.group.replace(".", "/"),
+            self.group.replace('.', "/"),
             self.artifact,
             self.version
         )
@@ -91,7 +91,7 @@ impl FromStr for GradleSpecifier {
             .collect::<Vec<&str>>();
 
         let group = components
-            .get(0)
+            .first()
             .ok_or(ModelError::InvalidGradleSpecifier {
                 specifier: s.to_string(),
             })?
@@ -114,19 +114,18 @@ impl FromStr for GradleSpecifier {
             extension = Some(at_split[1].to_string());
         }
 
-        let classifier: Option<String>;
-        if components.len() == 4 {
-            classifier = Some(
+        let classifier = if components.len() == 4 {
+            Some(
                 components
                     .get(3)
                     .ok_or(ModelError::InvalidGradleSpecifier {
                         specifier: s.to_string(),
                     })?
                     .to_string(),
-            );
+            )
         } else {
-            classifier = None;
-        }
+            None
+        };
 
         Ok(GradleSpecifier {
             group,

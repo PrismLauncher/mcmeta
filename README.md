@@ -28,16 +28,16 @@ under GPL-3.0-only.
 Eventually, mcmeta should implement at least the following goals:
 
 - [ ] Fetching metadata
-  - [ ] Minecraft
+  - [x] Minecraft
   - [ ] Forge
   - [ ] Liteloader
   - [ ] Fabric
   - [ ] Quilt
 - Storing metadata
-  - [ ] JSON
+  - [x] JSON
   - [ ] Database
 - [ ] Offering metadata
-  - [ ] Minecraft
+  - [x] Minecraft
   - [ ] Forge
   - [ ] Liteloader
   - [ ] Fabric
