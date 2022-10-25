@@ -61,7 +61,7 @@ Eventually, mcmeta should implement at least the following goals:
   - [ ] Database
 - [ ] Offering metadata
   - [x] Minecraft
-  - [ ] Forge
+  - [x] Forge
   - [ ] Liteloader
   - [ ] Fabric
   - [ ] Quilt
