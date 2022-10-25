@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::MetaMCError;
 
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "snake_case", untagged)]
+#[serde(rename_all = "snake_case", tag = "type")]
 pub enum StorageFormat {
     Json { meta_directory: String },
     Database,
@@ -18,10 +18,10 @@ pub struct ServerConfig {
 impl ServerConfig {
     pub fn from_config() -> Result<Self, MetaMCError> {
         let config = config::Config::builder()
-            .add_source(config::Environment::with_prefix("MCMETA"))
-            .set_default("bind_address", "127.0.0.1:8080")?
-            .set_default("storage_format", "json")?
-            .set_default("meta_directory", "meta")?
+            .add_source(config::Environment::with_prefix("mcmeta").separator("__"))
+            // .set_default("bind_address", "127.0.0.1:8080")?
+            // .set_default("storage_format.type", "json")?
+            // .set_default("storage_format.meta_directory", "meta")?
             .build()?;
 
         config.try_deserialize::<'_, Self>().map_err(Into::into)
