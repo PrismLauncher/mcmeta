@@ -33,8 +33,9 @@ git clone https://github.com/PrismLauncher/mcmeta.git
 cd mcmeta/mcmeta
 
 export RUST_LOG=INFO
-export MCMETA_BIND_ADDRESS=127.0.0.1:9988
-export MCMETA_META_DIRECTORY=../meta
+export MCMETA__BIND_ADDRESS=127.0.0.1:9988
+export MCMETA__STORAGE_FORMAT__TYPE=json
+export MCMETA__STORAGE_FORMAT__META_DIRECTORY=../meta
 cargo run
 ```
 
