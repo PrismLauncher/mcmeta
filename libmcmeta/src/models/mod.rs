@@ -2,6 +2,7 @@ use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
+pub mod forge;
 pub mod mojang;
 
 custom_error! { pub ModelError
