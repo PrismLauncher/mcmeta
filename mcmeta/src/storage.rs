@@ -1,7 +1,44 @@
-use libmcmeta::models::mojang::MojangVersionManifest;
-use tracing::info;
+use futures::{stream, StreamExt};
+use libmcmeta::models::mojang::{MojangVersionManifest, MojangVersionManifestVersion};
+use tracing::{debug, info, warn};
+
+use custom_error::custom_error;
 
 use crate::{app_config::StorageFormat, download, MetaMCError};
+
+custom_error! {
+    pub StorageError
+    MetaMC { source: MetaMCError } = "{source}",
+    Join { source: tokio::task::JoinError } = "Thread join error: {source}",
+}
+
+const NUM_PARALLEL_REQUESTS: usize = 4;
+
+pub async fn initialize_mojang_version_manifest(
+    versions_dir: std::path::PathBuf,
+    version: MojangVersionManifestVersion,
+) -> Result<(), MetaMCError> {
+    let version_file = versions_dir.join(format!("{}.json", &version.id));
+    if !version_file.exists() {
+        info!(
+            "Mojang metadata for version {} does not exist, downloading it",
+            &version.id
+        );
+        let version_manifest = download::mojang::load_version_manifest(&version.url)
+            .await
+            .map_err(|err| {
+                warn!(
+                    "Error parsing manifest for version {}: {}",
+                    &version.id,
+                    err.to_string()
+                );
+                err
+            })?;
+        let version_manifest_json = serde_json::to_string_pretty(&version_manifest)?;
+        std::fs::write(&version_file, version_manifest_json)?;
+    }
+    Ok(())
+}
 
 impl StorageFormat {
     pub async fn initialize_metadata(&self) -> Result<(), MetaMCError> {
@@ -57,20 +94,32 @@ impl StorageFormat {
                     );
                     std::fs::create_dir_all(&versions_dir)?;
                 }
-                for version in &manifest.versions {
-                    let version_file = versions_dir.join(format!("{}.json", &version.id));
-                    if !version_file.exists() {
-                        info!(
-                            "Mojang metadata for version {} does not exist, downloading it",
-                            &version.id
-                        );
-                        let version_manifest =
-                            download::mojang::load_version_manifest(&version.url).await?;
-                        let version_manifest_json =
-                            serde_json::to_string_pretty(&version_manifest)?;
-                        std::fs::write(&version_file, version_manifest_json)?;
-                    }
-                }
+
+                let versions = manifest.versions;
+                let tasks = stream::iter(versions)
+                    .map(|version| {
+                        let v = version.clone();
+                        let dir = versions_dir.clone();
+                        tokio::spawn(
+                            async move { initialize_mojang_version_manifest(dir, v).await },
+                        )
+                    })
+                    .buffer_unordered(NUM_PARALLEL_REQUESTS);
+                tasks
+                    .map(|t| async {
+                        match t {
+                            Ok(Ok(t)) => Ok(t),
+                            Ok(Err(e)) => Err(e),
+                            Err(e) => Err(e.into()),
+                        }
+                    })
+                    .for_each(|t| async {
+                        match t.await {
+                            Ok(t) => debug!("Task returned Ok: {:?}", t),
+                            Err(e) => debug!("Task had an error: {:?}", e),
+                        }
+                    })
+                    .await
             }
             StorageFormat::Database => todo!(),
         }

@@ -30,6 +30,7 @@ custom_error! {pub MetaMCError
     Hyper { source: hyper::Error } = "Error while running Hyper: {source}",
     IO { source: std::io::Error } = "Error while reading or writing: {source}",
     Json { source: serde_json::Error } = "Error while serializing or deserializing JSON: {source}",
+    Join { source: tokio::task::JoinError } = "Thread join error: {source}",
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -248,9 +249,30 @@ async fn raw_forge_version_installer(
     }
 }
 
+use tracing_subscriber::{filter, prelude::*};
+
 #[tokio::main]
 async fn main() -> Result<(), MetaMCError> {
-    tracing_subscriber::fmt::init();
+    let file_appender = tracing_appender::rolling::hourly("logs", "mcmeta.log");
+    let (non_blocking_file, _guard) = tracing_appender::non_blocking(file_appender);
+    let stdout_log = tracing_subscriber::fmt::layer()
+        .with_file(true)
+        .with_line_number(true)
+        .with_level(true)
+        .compact();
+
+    let debug_log = tracing_subscriber::fmt::layer()
+        .with_writer(non_blocking_file)
+        .with_filter(filter::LevelFilter::DEBUG);
+
+    tracing_subscriber::registry()
+        .with(
+            stdout_log
+                .with_filter(filter::LevelFilter::INFO)
+                .and_then(debug_log),
+        )
+        .init();
+
     let config = Arc::new(ServerConfig::from_config()?);
     debug!("Config: {:#?}", config);
 

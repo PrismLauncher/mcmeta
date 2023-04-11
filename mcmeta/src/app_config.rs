@@ -18,10 +18,14 @@ pub struct ServerConfig {
 impl ServerConfig {
     pub fn from_config() -> Result<Self, MetaMCError> {
         let config = config::Config::builder()
+            .set_default("bind_address", "127.0.0.1:8080")?
+            .set_default("storage_format.type", "json")?
+            .set_default("storage_format.meta_directory", "meta")?
             .add_source(config::Environment::with_prefix("mcmeta").separator("__"))
-            // .set_default("bind_address", "127.0.0.1:8080")?
-            // .set_default("storage_format.type", "json")?
-            // .set_default("storage_format.meta_directory", "meta")?
+            .add_source(config::File::new(
+                "config/settings",
+                config::FileFormat::Json,
+            ))
             .build()?;
 
         config.try_deserialize::<'_, Self>().map_err(Into::into)
