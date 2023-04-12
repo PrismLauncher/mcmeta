@@ -3,5 +3,8 @@
   "storage_format": {
     "type": "json",
     "meta_directory": "meta"
+  },
+  "metadata": {
+    "max_parallel_fetch_connections": 8
   }
 }

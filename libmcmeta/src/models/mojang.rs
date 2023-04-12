@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde_with::skip_serializing_none;
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangVersionManifest {
@@ -11,6 +12,7 @@ pub struct MojangVersionManifest {
 }
 
 /// The latest version of Minecraft.
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangVersionManifestLatest {
@@ -21,6 +23,7 @@ pub struct MojangVersionManifestLatest {
 }
 
 /// A version of Minecraft.
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangVersionManifestVersion {
@@ -41,6 +44,7 @@ pub struct MojangVersionManifestVersion {
     pub sha1: String,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AssetIndex {
@@ -51,6 +55,7 @@ pub struct AssetIndex {
     pub url: String,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionDownload {
@@ -59,6 +64,7 @@ pub struct VersionDownload {
     pub url: String,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct VersionDownloads {
@@ -69,6 +75,7 @@ pub struct VersionDownloads {
     pub server_mappings: Option<VersionDownload>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct JavaVersion {
@@ -76,6 +83,7 @@ pub struct JavaVersion {
     pub major_version: i32,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLibraryDownloadInfo {
@@ -85,6 +93,7 @@ pub struct VersionLibraryDownloadInfo {
     pub url: String,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLibraryClassifiers {
@@ -106,6 +115,7 @@ pub struct VersionLibraryClassifiers {
     pub sources: Option<VersionLibraryDownloadInfo>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLibraryNatives {
@@ -114,6 +124,7 @@ pub struct VersionLibraryNatives {
     pub windows: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLibraryDownloads {
@@ -121,12 +132,14 @@ pub struct VersionLibraryDownloads {
     pub classifiers: Option<VersionLibraryClassifiers>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLibraryExtract {
     pub exclude: Vec<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLibrary {
@@ -137,6 +150,7 @@ pub struct VersionLibrary {
     pub rules: Option<Vec<ManifestRule>>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ManifestRule {
@@ -145,18 +159,21 @@ pub struct ManifestRule {
     pub features: Option<ManifestRuleFeatures>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ManifestRuleFeatures {
     pub is_demo_user: Option<bool>,
     pub has_custom_resolution: Option<bool>,
+    pub has_quick_plays_support: Option<bool>,
     pub is_quick_play_singleplayer: Option<bool>,
     pub is_quick_play_multiplayer: Option<bool>,
     pub is_quick_play_realms: Option<bool>,
     // #[serde(flatten)]
-    // pub unknown: hashmap<string, serde_json::value>,
+    // pub unknown: HashMap<String, serde_json::Value>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ManifestRuleOS {
@@ -165,12 +182,14 @@ pub struct ManifestRuleOS {
     pub arch: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLogging {
     pub client: VersionLoggingClient,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLoggingClient {
@@ -180,6 +199,7 @@ pub struct VersionLoggingClient {
     pub logging_type: String,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionLoggingClientFile {
@@ -189,6 +209,7 @@ pub struct VersionLoggingClientFile {
     pub url: String,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum VersionArgument {
@@ -196,6 +217,7 @@ pub enum VersionArgument {
     Object(VersionArgumentObject),
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum VersionArgumentValue {
@@ -203,6 +225,7 @@ pub enum VersionArgumentValue {
     Array(Vec<String>),
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionArgumentObject {
@@ -210,6 +233,7 @@ pub struct VersionArgumentObject {
     pub value: VersionArgumentValue,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VersionArguments {
@@ -217,6 +241,7 @@ pub struct VersionArguments {
     pub jvm: Vec<VersionArgument>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MinecraftVersion {

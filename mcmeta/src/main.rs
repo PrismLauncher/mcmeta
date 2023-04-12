@@ -22,6 +22,7 @@ use tracing::{debug, info};
 mod app_config;
 mod download;
 mod storage;
+mod utils;
 
 custom_error! {pub MetaMCError
     MojangMetadata { source: download::mojang::MojangMetadataError } = "Error while downloading Mojang metadata: {source}",
@@ -268,7 +269,7 @@ async fn main() -> Result<(), MetaMCError> {
     tracing_subscriber::registry()
         .with(
             stdout_log
-                .with_filter(filter::LevelFilter::INFO)
+                // .with_filter(filter::LevelFilter::INFO)
                 .and_then(debug_log),
         )
         .init();
@@ -276,7 +277,10 @@ async fn main() -> Result<(), MetaMCError> {
     let config = Arc::new(ServerConfig::from_config()?);
     debug!("Config: {:#?}", config);
 
-    config.storage_format.initialize_metadata().await?;
+    config
+        .storage_format
+        .initialize_metadata(&config.metadata)
+        .await?;
 
     let raw_mojang_routes = Router::new()
         .route("/", get(raw_mojang_manifest))

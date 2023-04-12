@@ -4,15 +4,13 @@ use tracing::{debug, info, warn};
 
 use custom_error::custom_error;
 
-use crate::{app_config::StorageFormat, download, MetaMCError};
+use crate::{app_config::MetadataConfig, app_config::StorageFormat, download, MetaMCError};
 
 custom_error! {
     pub StorageError
     MetaMC { source: MetaMCError } = "{source}",
     Join { source: tokio::task::JoinError } = "Thread join error: {source}",
 }
-
-const NUM_PARALLEL_REQUESTS: usize = 4;
 
 pub async fn initialize_mojang_version_manifest(
     versions_dir: std::path::PathBuf,
@@ -41,7 +39,10 @@ pub async fn initialize_mojang_version_manifest(
 }
 
 impl StorageFormat {
-    pub async fn initialize_metadata(&self) -> Result<(), MetaMCError> {
+    pub async fn initialize_metadata(
+        &self,
+        metadata_cfg: &MetadataConfig,
+    ) -> Result<(), MetaMCError> {
         match self {
             StorageFormat::Json { meta_directory } => {
                 let metadata_dir = std::path::Path::new(meta_directory);
@@ -53,7 +54,7 @@ impl StorageFormat {
                     std::fs::create_dir_all(metadata_dir)?;
                 }
 
-                self.initialize_mojang_metadata().await?;
+                self.initialize_mojang_metadata(metadata_cfg).await?;
             }
             StorageFormat::Database => todo!(),
         }
@@ -61,7 +62,10 @@ impl StorageFormat {
         Ok(())
     }
 
-    pub async fn initialize_mojang_metadata(&self) -> Result<(), MetaMCError> {
+    pub async fn initialize_mojang_metadata(
+        &self,
+        metadata_cfg: &MetadataConfig,
+    ) -> Result<(), MetaMCError> {
         match self {
             StorageFormat::Json { meta_directory } => {
                 info!("Checking for Mojang metadata");
@@ -104,7 +108,7 @@ impl StorageFormat {
                             async move { initialize_mojang_version_manifest(dir, v).await },
                         )
                     })
-                    .buffer_unordered(NUM_PARALLEL_REQUESTS);
+                    .buffer_unordered(metadata_cfg.max_parallel_fetch_connections);
                 tasks
                     .map(|t| async {
                         match t {
@@ -115,7 +119,7 @@ impl StorageFormat {
                     })
                     .for_each(|t| async {
                         match t.await {
-                            Ok(t) => debug!("Task returned Ok: {:?}", t),
+                            Ok(_) => {}
                             Err(e) => debug!("Task had an error: {:?}", e),
                         }
                     })

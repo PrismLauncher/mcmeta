@@ -10,9 +10,15 @@ pub enum StorageFormat {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct MetadataConfig {
+    pub max_parallel_fetch_connections: usize,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct ServerConfig {
     pub bind_address: String,
     pub storage_format: StorageFormat,
+    pub metadata: MetadataConfig,
 }
 
 impl ServerConfig {
@@ -21,11 +27,12 @@ impl ServerConfig {
             .set_default("bind_address", "127.0.0.1:8080")?
             .set_default("storage_format.type", "json")?
             .set_default("storage_format.meta_directory", "meta")?
-            .add_source(config::Environment::with_prefix("mcmeta").separator("__"))
+            .set_default("metadata.max_parallel_fetch_connections", 4)?
             .add_source(config::File::new(
                 "config/settings",
                 config::FileFormat::Json,
             ))
+            .add_source(config::Environment::with_prefix("mcmeta").separator("__"))
             .build()?;
 
         config.try_deserialize::<'_, Self>().map_err(Into::into)

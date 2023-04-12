@@ -1,3 +1,4 @@
+use crate::utils;
 use custom_error::custom_error;
 use libmcmeta::models::mojang::{MinecraftVersion, MojangVersionManifest};
 use serde::Deserialize;
@@ -51,15 +52,7 @@ pub async fn load_manifest() -> Result<MojangVersionManifest, MojangMetadataErro
         serde_json::from_str(&body).map_err(|err| -> MojangMetadataError {
             match err.classify() {
                 serde_json::error::Category::Data => {
-                    let ctx_line = body.lines().nth(err.line() - 1).unwrap();
-                    let line_pos = ctx_line.char_indices().nth(err.column()).unwrap().0;
-                    let mut ctx = ctx_line.split_at(line_pos).1.to_owned();
-                    let ctx_len = ctx.len();
-
-                    if ctx_len > 100 {
-                        ctx = ctx.split_at(100 - 4).0.to_owned() + " ...";
-                    }
-
+                    let ctx = utils::get_json_context_back(&err, &body, 200);
                     MojangMetadataError::BadData {
                         ctx,
                         line: err.line(),
@@ -92,15 +85,7 @@ pub async fn load_version_manifest(
         serde_json::from_str(&body).map_err(|err| -> MojangMetadataError {
             match err.classify() {
                 serde_json::error::Category::Data => {
-                    let ctx_line = body.lines().nth(err.line() - 1).unwrap();
-                    let line_pos = ctx_line.char_indices().nth(err.column()).unwrap().0;
-                    let mut ctx = ctx_line.split_at(line_pos).1.to_owned();
-                    let ctx_len = ctx.len();
-
-                    if ctx_len > 100 {
-                        ctx = ctx.split_at(100 - 4).0.to_owned() + " ...";
-                    }
-
+                    let ctx = utils::get_json_context_back(&err, &body, 200);
                     MojangMetadataError::BadData {
                         ctx,
                         line: err.line(),
