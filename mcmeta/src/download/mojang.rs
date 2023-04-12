@@ -1,7 +1,8 @@
-use crate::utils;
+use crate::utils::get_json_context_back;
 use custom_error::custom_error;
 use libmcmeta::models::mojang::{MinecraftVersion, MojangVersionManifest};
 use serde::Deserialize;
+use serde_valid::Validate;
 use tracing::debug;
 
 custom_error! {pub MojangMetadataError
@@ -10,10 +11,23 @@ custom_error! {pub MojangMetadataError
     Deserialization { source: serde_json::Error } = "Deserialization error: {source}",
     BadData {
         ctx: String,
-        line: usize,
-        column: usize,
         source: serde_json::Error
-    } = "{source}. Context at {line}:{column} (may be truncated) \" {ctx} \"" ,
+    } = @{
+        format!("{}. Context at {}:{} (may be truncated) \" {} \"", source, source.line(), source.column(), ctx)
+    },
+    Validation { source: serde_valid::validation::Errors } = "Validation Error: {source}",
+}
+
+impl MojangMetadataError {
+    fn from_json_err(err: serde_json::Error, body: &str) -> Self {
+        match err.classify() {
+            serde_json::error::Category::Data => Self::BadData {
+                ctx: get_json_context_back(&err, body, 200),
+                source: err,
+            },
+            _ => err.into(),
+        }
+    }
 }
 
 fn default_download_url() -> String {
@@ -48,22 +62,9 @@ pub async fn load_manifest() -> Result<MojangVersionManifest, MojangMetadataErro
         .text()
         .await?;
 
-    let manifest: MojangVersionManifest =
-        serde_json::from_str(&body).map_err(|err| -> MojangMetadataError {
-            match err.classify() {
-                serde_json::error::Category::Data => {
-                    let ctx = utils::get_json_context_back(&err, &body, 200);
-                    MojangMetadataError::BadData {
-                        ctx,
-                        line: err.line(),
-                        column: err.column(),
-                        source: err,
-                    }
-                    .into()
-                }
-                _ => err.into(),
-            }
-        })?;
+    let manifest: MojangVersionManifest = serde_json::from_str(&body)
+        .map_err(|err| MojangMetadataError::from_json_err(err, &body))?;
+    manifest.validate()?;
     Ok(manifest)
 }
 
@@ -81,21 +82,8 @@ pub async fn load_version_manifest(
         .error_for_status()?
         .text()
         .await?;
-    let manifest: MinecraftVersion =
-        serde_json::from_str(&body).map_err(|err| -> MojangMetadataError {
-            match err.classify() {
-                serde_json::error::Category::Data => {
-                    let ctx = utils::get_json_context_back(&err, &body, 200);
-                    MojangMetadataError::BadData {
-                        ctx,
-                        line: err.line(),
-                        column: err.column(),
-                        source: err,
-                    }
-                    .into()
-                }
-                _ => err.into(),
-            }
-        })?;
+    let manifest: MinecraftVersion = serde_json::from_str(&body)
+        .map_err(|err| MojangMetadataError::from_json_err(err, &body))?;
+    manifest.validate()?;
     Ok(manifest)
 }
