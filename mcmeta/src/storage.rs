@@ -4,7 +4,7 @@ use tracing::{debug, info, warn};
 
 use custom_error::custom_error;
 
-use crate::{app_config::MetadataConfig, app_config::StorageFormat, download, MetaMCError};
+use crate::{app_config::MetadataConfig, app_config::StorageFormat, download, errors::MetaMCError};
 
 custom_error! {
     pub StorageError

@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::MetaMCError;
+use crate::errors::MetaMCError;
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
