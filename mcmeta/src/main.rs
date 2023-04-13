@@ -1,4 +1,4 @@
-use std::{path::Path as StdPath, sync::Arc};
+use std::{path::Path as StdPath, str::FromStr, sync::Arc};
 
 use app_config::{ServerConfig, StorageFormat};
 use axum::{
@@ -25,7 +25,7 @@ mod storage;
 mod utils;
 
 custom_error! {pub MetaMCError
-    MojangMetadata { source: download::mojang::MojangMetadataError } = "Error while downloading Mojang metadata: {source}",
+    MojangMetadata { source: download::errors::MetadataError } = "Error while downloading metadata: {source}",
     Config { source: config::ConfigError } = "Error while reading config from environment",
     Parse { source: std::net::AddrParseError } = "Error while parsing address: {source}",
     Hyper { source: hyper::Error } = "Error while running Hyper: {source}",
@@ -250,13 +250,31 @@ async fn raw_forge_version_installer(
     }
 }
 
+use argparse::{ArgumentParser, Store};
+use dotenv::dotenv;
 use tracing_subscriber::{filter, prelude::*};
 
 #[tokio::main]
 async fn main() -> Result<(), MetaMCError> {
-    let config = Arc::new(ServerConfig::from_config()?);
+    dotenv().ok(); // This line loads the environment variables from the ".env" file.
 
-    let file_appender = tracing_appender::rolling::hourly(&config.debug_log.path, &config.debug_log.prefix);
+    let mut config_path = "".to_string();
+    {
+        // limit scope of argparse borrows
+        let mut ap = ArgumentParser::new();
+        ap.set_description("A Minecraft metadata api server for Mojang and Modloader metadata.");
+        ap.refer(&mut config_path).add_option(
+            &["-c", "--config"],
+            Store,
+            "Path to a json config file.",
+        );
+        ap.parse_args_or_exit();
+    }
+
+    let config = Arc::new(ServerConfig::from_config(&config_path)?);
+
+    let file_appender =
+        tracing_appender::rolling::hourly(&config.debug_log.path, &config.debug_log.prefix);
     let (non_blocking_file, _guard) = tracing_appender::non_blocking(file_appender);
     let stdout_log = tracing_subscriber::fmt::layer()
         .with_file(true)
@@ -267,7 +285,9 @@ async fn main() -> Result<(), MetaMCError> {
     let debug_log = tracing_subscriber::fmt::layer()
         .with_ansi(false)
         .with_writer(non_blocking_file)
-        .with_filter(filter::LevelFilter::from_level(config.debug_log.tracing_level()));
+        .with_filter(filter::LevelFilter::from_level(
+            tracing::Level::from_str(&config.debug_log.level).unwrap_or(tracing::Level::DEBUG),
+        ));
 
     if config.debug_log.enable {
         tracing_subscriber::registry()
