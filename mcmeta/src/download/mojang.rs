@@ -1,34 +1,9 @@
-use crate::utils::get_json_context_back;
-use custom_error::custom_error;
 use libmcmeta::models::mojang::{MinecraftVersion, MojangVersionManifest};
 use serde::Deserialize;
 use serde_valid::Validate;
 use tracing::debug;
 
-custom_error! {pub MojangMetadataError
-    Config { source: config::ConfigError } = "Error while reading config from environment",
-    Request { source: reqwest::Error } = "Request error: {source}",
-    Deserialization { source: serde_json::Error } = "Deserialization error: {source}",
-    BadData {
-        ctx: String,
-        source: serde_json::Error
-    } = @{
-        format!("{}. Context at {}:{} (may be truncated) \" {} \"", source, source.line(), source.column(), ctx)
-    },
-    Validation { source: serde_valid::validation::Errors } = "Validation Error: {source}",
-}
-
-impl MojangMetadataError {
-    fn from_json_err(err: serde_json::Error, body: &str) -> Self {
-        match err.classify() {
-            serde_json::error::Category::Data => Self::BadData {
-                ctx: get_json_context_back(&err, body, 200),
-                source: err,
-            },
-            _ => err.into(),
-        }
-    }
-}
+use crate::download::errors::MetadataError;
 
 fn default_download_url() -> String {
     "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json".to_string()
@@ -41,7 +16,7 @@ struct DownloadConfig {
 }
 
 impl DownloadConfig {
-    fn from_config() -> Result<Self, MojangMetadataError> {
+    fn from_config() -> Result<Self, MetadataError> {
         let config = config::Config::builder()
             .add_source(config::Environment::with_prefix("MCMETA_MOJANG"))
             .build()?;
@@ -50,7 +25,7 @@ impl DownloadConfig {
     }
 }
 
-pub async fn load_manifest() -> Result<MojangVersionManifest, MojangMetadataError> {
+pub async fn load_manifest() -> Result<MojangVersionManifest, MetadataError> {
     let client = reqwest::Client::new();
     let config = DownloadConfig::from_config()?;
 
@@ -62,15 +37,13 @@ pub async fn load_manifest() -> Result<MojangVersionManifest, MojangMetadataErro
         .text()
         .await?;
 
-    let manifest: MojangVersionManifest = serde_json::from_str(&body)
-        .map_err(|err| MojangMetadataError::from_json_err(err, &body))?;
+    let manifest: MojangVersionManifest =
+        serde_json::from_str(&body).map_err(|err| MetadataError::from_json_err(err, &body))?;
     manifest.validate()?;
     Ok(manifest)
 }
 
-pub async fn load_version_manifest(
-    version_url: &str,
-) -> Result<MinecraftVersion, MojangMetadataError> {
+pub async fn load_version_manifest(version_url: &str) -> Result<MinecraftVersion, MetadataError> {
     let client = reqwest::Client::new();
 
     debug!("Fetching version manifest from {:#?}", version_url);
@@ -82,8 +55,8 @@ pub async fn load_version_manifest(
         .error_for_status()?
         .text()
         .await?;
-    let manifest: MinecraftVersion = serde_json::from_str(&body)
-        .map_err(|err| MojangMetadataError::from_json_err(err, &body))?;
+    let manifest: MinecraftVersion =
+        serde_json::from_str(&body).map_err(|err| MetadataError::from_json_err(err, &body))?;
     manifest.validate()?;
     Ok(manifest)
 }

@@ -1,25 +1,27 @@
+use serde::{Deserialize, Serialize};
+use serde_valid::Validate;
+use serde_with::skip_serializing_none;
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 pub struct ForgeMavenMetadata {
     #[serde(flatten)]
     pub versions: HashMap<String, Vec<String>>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 pub struct ForgeMavenPromotions {
     pub homepage: String,
     pub promos: HashMap<String, String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 pub struct ForgeVersionMeta {
     pub classifiers: ForgeVersionClassifiers,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionClassifier {
     pub txt: Option<String>,
@@ -28,7 +30,8 @@ pub struct ForgeVersionClassifier {
     pub stash: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionClassifiers {
     pub changelog: Option<ForgeVersionClassifier>,
@@ -47,14 +50,15 @@ pub struct ForgeVersionClassifiers {
     pub src_zip: Option<ForgeVersionClassifier>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionArguments {
     pub game: Vec<String>,
     pub jvm: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionLibraryArtifact {
     pub path: String,
@@ -63,20 +67,20 @@ pub struct ForgeVersionLibraryArtifact {
     pub size: u64,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionLibraryDownloads {
     pub artifact: ForgeVersionLibraryArtifact,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionLibrary {
     pub name: String,
     pub downloads: ForgeVersionLibraryDownloads,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionLoggingFile {
     pub id: String,
@@ -85,7 +89,7 @@ pub struct ForgeVersionLoggingFile {
     pub url: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionLoggingClient {
     pub argument: String,
@@ -94,13 +98,14 @@ pub struct ForgeVersionLoggingClient {
     pub client_type: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeVersionLogging {
     pub client: Option<ForgeVersionLoggingClient>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ForgeVersion {
     #[serde(rename = "_comment_")]
@@ -118,14 +123,15 @@ pub struct ForgeVersion {
     pub minecraft_arguments: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeInstallerDataInfo {
     pub client: String,
     pub server: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct ForgeInstallerData {
     pub mappings: Option<ForgeInstallerDataInfo>,
@@ -145,7 +151,8 @@ pub struct ForgeInstallerData {
     pub mc_data_sha: Option<ForgeInstallerDataInfo>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields)]
 pub struct ForgeInstallerProcessor {
     pub sides: Option<Vec<String>>,
@@ -155,11 +162,11 @@ pub struct ForgeInstallerProcessor {
     pub outputs: Option<HashMap<String, String>>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeLegacyLogging {}
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyInstall {
     pub profile_name: String,
@@ -174,7 +181,8 @@ pub struct ForgeLegacyInstall {
     pub mod_list: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyLibraryNatives {
     pub linux: Option<String>,
@@ -182,20 +190,22 @@ pub struct ForgeLegacyLibraryNatives {
     pub windows: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyLibraryExtract {
     pub exclude: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ManifestRule {
     pub action: String,
     pub os: Option<ManifestRuleOS>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ManifestRuleOS {
     pub name: Option<String>,
@@ -203,7 +213,8 @@ pub struct ManifestRuleOS {
     pub arch: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyLibrary {
     pub name: String,
@@ -217,7 +228,8 @@ pub struct ForgeLegacyLibrary {
     pub comment: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyVersionInfo {
     pub id: String,
@@ -236,7 +248,7 @@ pub struct ForgeLegacyVersionInfo {
     pub logging: Option<ForgeLegacyLogging>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct ForgeLegacyOptional {
     pub name: String,
@@ -250,7 +262,8 @@ pub struct ForgeLegacyOptional {
     pub maven: String,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyInstallerManifest {
     #[serde(rename = "_comment_")]
@@ -260,7 +273,8 @@ pub struct ForgeLegacyInstallerManifest {
     pub optionals: Option<Vec<ForgeLegacyOptional>>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeInstallerManifest {
     #[serde(rename = "_comment_")]
@@ -281,7 +295,7 @@ pub struct ForgeInstallerManifest {
     pub libraries: Vec<ForgeVersionLibrary>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[serde(untagged)]
 pub enum ForgeInstallerManifestVersion {
     Legacy(Box<ForgeLegacyInstallerManifest>),
