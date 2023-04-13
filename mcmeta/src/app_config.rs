@@ -15,10 +15,32 @@ pub struct MetadataConfig {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct DebugLogConfig {
+    pub enable: bool,
+    pub path: String,
+    pub prefix: String,
+    pub level: String,
+}
+
+impl DebugLogConfig {
+    pub fn tracing_level(&self) -> tracing::Level {
+        match self.level.to_uppercase().trim() {
+            "TRACE" => tracing::Level::TRACE,
+            "DEBUG" => tracing::Level::DEBUG,
+            "INFO" => tracing::Level::INFO,
+            "WARN" => tracing::Level::WARN,
+            "ERROR" => tracing::Level::ERROR,
+            _ => tracing::Level::ERROR,
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
 pub struct ServerConfig {
     pub bind_address: String,
     pub storage_format: StorageFormat,
     pub metadata: MetadataConfig,
+    pub debug_log: DebugLogConfig,
 }
 
 impl ServerConfig {
@@ -28,6 +50,10 @@ impl ServerConfig {
             .set_default("storage_format.type", "json")?
             .set_default("storage_format.meta_directory", "meta")?
             .set_default("metadata.max_parallel_fetch_connections", 4)?
+            .set_default("debug_log.enable", false)?
+            .set_default("debug_log.path", "./logs")?
+            .set_default("debug_log.prefix", "mcmeta.log")?
+            .set_default("debug_log.level", "debug")?
             .add_source(config::File::new(
                 "config/settings",
                 config::FileFormat::Json,

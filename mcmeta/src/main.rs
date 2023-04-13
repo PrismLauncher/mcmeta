@@ -254,7 +254,9 @@ use tracing_subscriber::{filter, prelude::*};
 
 #[tokio::main]
 async fn main() -> Result<(), MetaMCError> {
-    let file_appender = tracing_appender::rolling::hourly("logs", "mcmeta.log");
+    let config = Arc::new(ServerConfig::from_config()?);
+
+    let file_appender = tracing_appender::rolling::hourly(&config.debug_log.path, &config.debug_log.prefix);
     let (non_blocking_file, _guard) = tracing_appender::non_blocking(file_appender);
     let stdout_log = tracing_subscriber::fmt::layer()
         .with_file(true)
@@ -263,18 +265,21 @@ async fn main() -> Result<(), MetaMCError> {
         .compact();
 
     let debug_log = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
         .with_writer(non_blocking_file)
-        .with_filter(filter::LevelFilter::DEBUG);
+        .with_filter(filter::LevelFilter::from_level(config.debug_log.tracing_level()));
 
-    tracing_subscriber::registry()
-        .with(
-            stdout_log
-                // .with_filter(filter::LevelFilter::INFO)
-                .and_then(debug_log),
-        )
-        .init();
+    if config.debug_log.enable {
+        tracing_subscriber::registry()
+            .with(stdout_log.with_filter(filter::EnvFilter::from_default_env()))
+            .with(debug_log)
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(stdout_log.with_filter(filter::EnvFilter::from_default_env()))
+            .init();
+    }
 
-    let config = Arc::new(ServerConfig::from_config()?);
     debug!("Config: {:#?}", config);
 
     config
