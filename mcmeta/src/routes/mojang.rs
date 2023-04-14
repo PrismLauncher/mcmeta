@@ -1,6 +1,6 @@
 use axum::{extract::Path, response::IntoResponse, Extension};
 use libmcmeta::models::mojang::{MinecraftVersion, MojangVersionManifest};
-use std::{path::Path as StdPath, str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 use crate::app_config::{ServerConfig, StorageFormat};
 use crate::routes::APIResponse;
