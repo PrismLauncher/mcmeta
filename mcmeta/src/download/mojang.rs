@@ -3,6 +3,8 @@ use serde::Deserialize;
 use serde_valid::Validate;
 use tracing::debug;
 
+use anyhow::Result;
+
 use crate::download::errors::MetadataError;
 
 fn default_download_url() -> String {
@@ -16,7 +18,7 @@ struct DownloadConfig {
 }
 
 impl DownloadConfig {
-    fn from_config() -> Result<Self, MetadataError> {
+    fn from_config() -> Result<Self> {
         let config = config::Config::builder()
             .add_source(config::Environment::with_prefix("MCMETA_MOJANG"))
             .build()?;
@@ -25,7 +27,7 @@ impl DownloadConfig {
     }
 }
 
-pub async fn load_manifest() -> Result<MojangVersionManifest, MetadataError> {
+pub async fn load_manifest() -> Result<MojangVersionManifest> {
     let client = reqwest::Client::new();
     let config = DownloadConfig::from_config()?;
 
@@ -43,7 +45,7 @@ pub async fn load_manifest() -> Result<MojangVersionManifest, MetadataError> {
     Ok(manifest)
 }
 
-pub async fn load_version_manifest(version_url: &str) -> Result<MinecraftVersion, MetadataError> {
+pub async fn load_version_manifest(version_url: &str) -> Result<MinecraftVersion> {
     let client = reqwest::Client::new();
 
     debug!("Fetching version manifest from {:#?}", version_url);

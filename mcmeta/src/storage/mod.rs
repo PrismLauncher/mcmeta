@@ -1,14 +1,11 @@
+use crate::{app_config::MetadataConfig, app_config::StorageFormat};
+use anyhow::Result;
 use tracing::info;
-
-use crate::{app_config::MetadataConfig, app_config::StorageFormat, errors::MetaMCError};
 
 mod mojang;
 
 impl StorageFormat {
-    pub async fn initialize_metadata(
-        &self,
-        metadata_cfg: &MetadataConfig,
-    ) -> Result<(), MetaMCError> {
+    pub async fn initialize_metadata(&self, metadata_cfg: &MetadataConfig) -> Result<()> {
         match self {
             StorageFormat::Json { meta_directory } => {
                 let metadata_dir = std::path::Path::new(meta_directory);

@@ -1,28 +1,24 @@
 use crate::utils::get_json_context_back;
-use custom_error::custom_error;
+use thiserror::Error;
 
-custom_error! {
-    pub MetadataError
-    Config { source: config::ConfigError } = "Error while reading config from environment",
-    Request { source: reqwest::Error } = "Request error: {source}",
-    Deserialization { source: serde_json::Error } = "Deserialization error: {source}",
+#[derive(Error, Debug)]
+pub enum MetadataError {
+    #[error("Unable to deserialise object at {line}:{column}. Context `{ctx}` \n\nCaused by:\n\t{source}")]
     BadData {
         ctx: String,
-        source: serde_json::Error
-    } = @{
-        format!("{}. Context at {}:{} (may be truncated) \" {} \"", source, source.line(), source.column(), ctx)
+        line: usize,
+        column: usize,
+        source: serde_json::Error,
     },
-    Validation { source: serde_valid::validation::Errors } = "Validation Error: {source}",
 }
 
 impl MetadataError {
     pub fn from_json_err(err: serde_json::Error, body: &str) -> Self {
-        match err.classify() {
-            serde_json::error::Category::Data => Self::BadData {
-                ctx: get_json_context_back(&err, body, 200),
-                source: err,
-            },
-            _ => err.into(),
+        Self::BadData {
+            ctx: get_json_context_back(&err, body, 200),
+            line: err.line(),
+            column: err.column(),
+            source: err,
         }
     }
 }

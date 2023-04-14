@@ -5,6 +5,7 @@ use axum::{routing::get, Extension, Router};
 
 use tracing::{debug, info};
 
+use anyhow::Result;
 use argparse::{ArgumentParser, Store};
 use dotenv::dotenv;
 use tracing_subscriber::{filter, prelude::*};
@@ -17,7 +18,7 @@ mod storage;
 mod utils;
 
 #[tokio::main]
-async fn main() -> Result<(), errors::MetaMCError> {
+async fn main() -> Result<()> {
     dotenv().ok(); // This line loads the environment variables from the ".env" file.
 
     let mut config_path = "".to_string();

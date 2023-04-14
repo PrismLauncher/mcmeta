@@ -1,6 +1,5 @@
+use anyhow::Result;
 use serde::Deserialize;
-
-use crate::errors::MetaMCError;
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
@@ -31,7 +30,7 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    pub fn from_config(path: &str) -> Result<Self, MetaMCError> {
+    pub fn from_config(path: &str) -> Result<Self> {
         let config = config::Config::builder()
             .set_default("bind_address", "127.0.0.1:8080")?
             .set_default("storage_format.type", "json")?

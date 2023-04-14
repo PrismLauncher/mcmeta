@@ -161,11 +161,10 @@ pub fn get_json_context_back(err: &serde_json::Error, body: &str, max_len: usize
     }
 
     if max_len > 0 && ctx.chars().count() > max_len {
-        ctx = ctx
-            .split_at(ctx.char_indices().nth(max_len).unwrap().0)
-            .0
-            .to_owned()
-            + " ...";
+        ctx = "... ".to_owned()
+            + ctx
+                .split_at(ctx.char_indices().rev().nth(max_len).unwrap().0)
+                .0;
     }
     ctx
 }

@@ -2,12 +2,14 @@ use futures::{stream, StreamExt};
 use libmcmeta::models::mojang::{MojangVersionManifest, MojangVersionManifestVersion};
 use tracing::{debug, info, warn};
 
-use crate::{app_config::MetadataConfig, download, errors::MetaMCError, storage::StorageFormat};
+use anyhow::{Context, Result};
+
+use crate::{app_config::MetadataConfig, download, storage::StorageFormat};
 
 pub async fn initialize_mojang_version_manifest_json(
-    versions_dir: std::path::PathBuf,
-    version: MojangVersionManifestVersion,
-) -> Result<(), MetaMCError> {
+    versions_dir: &std::path::PathBuf,
+    version: &MojangVersionManifestVersion,
+) -> Result<()> {
     let version_file = versions_dir.join(format!("{}.json", &version.id));
     if !version_file.exists() {
         info!(
@@ -33,7 +35,7 @@ pub async fn initialize_mojang_version_manifest_json(
 async fn initialize_mojang_metadata_json(
     metadata_cfg: &MetadataConfig,
     meta_directory: &str,
-) -> Result<(), MetaMCError> {
+) -> Result<()> {
     let metadata_dir = std::path::Path::new(meta_directory);
     let mojang_meta_dir = metadata_dir.join("mojang");
 
@@ -68,7 +70,11 @@ async fn initialize_mojang_metadata_json(
         .map(|version| {
             let v = version.clone();
             let dir = versions_dir.clone();
-            tokio::spawn(async move { initialize_mojang_version_manifest_json(dir, v).await })
+            tokio::spawn(async move {
+                initialize_mojang_version_manifest_json(&dir, &v)
+                    .await
+                    .with_context(|| format!("Failed to initialize Mojang version {}", v.id))
+            })
         })
         .buffer_unordered(metadata_cfg.max_parallel_fetch_connections);
     let results = tasks
@@ -92,11 +98,13 @@ async fn initialize_mojang_metadata_json(
 pub async fn initialize_mojang_metadata(
     storage_format: &StorageFormat,
     metadata_cfg: &MetadataConfig,
-) -> Result<(), MetaMCError> {
+) -> Result<()> {
     info!("Checking for Mojang metadata");
     match storage_format {
         StorageFormat::Json { meta_directory } => {
-            return initialize_mojang_metadata_json(metadata_cfg, meta_directory).await
+            return initialize_mojang_metadata_json(metadata_cfg, meta_directory)
+                .await
+                .with_context(|| "Failed to initialize Mojang metadata in the json format")
         }
         StorageFormat::Database => todo!(),
     }

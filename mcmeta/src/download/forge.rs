@@ -5,6 +5,8 @@ use tracing::debug;
 
 use crate::download::errors::MetadataError;
 
+use anyhow::Result;
+
 fn default_maven_url() -> String {
     "https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json".to_string()
 }
@@ -22,7 +24,7 @@ struct DownloadConfig {
 }
 
 impl DownloadConfig {
-    fn from_config() -> Result<Self, MetadataError> {
+    fn from_config() -> Result<Self> {
         let config = config::Config::builder()
             .add_source(config::Environment::with_prefix("MCMETA_FORGE"))
             .build()?;
@@ -31,7 +33,7 @@ impl DownloadConfig {
     }
 }
 
-pub async fn load_maven_metadata() -> Result<ForgeMavenMetadata, MetadataError> {
+pub async fn load_maven_metadata() -> Result<ForgeMavenMetadata> {
     let client = reqwest::Client::new();
     let config = DownloadConfig::from_config()?;
 
@@ -49,7 +51,7 @@ pub async fn load_maven_metadata() -> Result<ForgeMavenMetadata, MetadataError> 
     Ok(metadata)
 }
 
-pub async fn load_maven_promotions() -> Result<ForgeMavenPromotions, MetadataError> {
+pub async fn load_maven_promotions() -> Result<ForgeMavenPromotions> {
     let client = reqwest::Client::new();
     let config = DownloadConfig::from_config()?;
 
