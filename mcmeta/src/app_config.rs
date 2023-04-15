@@ -4,13 +4,17 @@ use serde::Deserialize;
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum StorageFormat {
-    Json { meta_directory: String },
+    Json {
+        meta_directory: String,
+        generated_directory: String,
+    },
     Database,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct MetadataConfig {
     pub max_parallel_fetch_connections: usize,
+    pub static_directory: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -35,7 +39,9 @@ impl ServerConfig {
             .set_default("bind_address", "127.0.0.1:8080")?
             .set_default("storage_format.type", "json")?
             .set_default("storage_format.meta_directory", "meta")?
+            .set_default("storage_format.generated_directory", "generated")?
             .set_default("metadata.max_parallel_fetch_connections", 4)?
+            .set_default("metadata.static_directory", "static")?
             .set_default("debug_log.enable", false)?
             .set_default("debug_log.path", "./logs")?
             .set_default("debug_log.prefix", "mcmeta.log")?

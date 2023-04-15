@@ -268,7 +268,7 @@ pub struct MinecraftVersion {
     pub asset_index: AssetIndex,
     pub assets: String,
     pub compliance_level: Option<i32>,
-    pub downloads: VersionDownloads,
+    pub downloads: Option<VersionDownloads>,
     pub id: String,
     pub java_version: Option<JavaVersion>,
     #[validate]
@@ -283,6 +283,33 @@ pub struct MinecraftVersion {
     pub time: String,
     #[serde(rename = "type")]
     pub release_type: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct ExperimentEntry {
+    pub id: String,
+    pub url: String,
+    pub wiki: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct ExperimentIndex {
+    pub experiments: Vec<ExperimentEntry>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct OldSnapshotEntry {
+    pub id: String,
+    pub url: String,
+    pub wiki: Option<String>,
+    pub jar: String,
+    pub sha1: String,
+    pub size: i32,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct OldSnapshotIndex {
+    pub old_snapshots: Vec<OldSnapshotEntry>,
 }
 
 #[cfg(test)]

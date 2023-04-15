@@ -7,7 +7,10 @@ use crate::routes::APIResponse;
 
 pub async fn raw_mojang_manifest(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
     match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
+        StorageFormat::Json {
+            meta_directory,
+            generated_directory: _,
+        } => {
             let metadata_dir = std::path::Path::new(meta_directory);
             let mojang_meta_dir = metadata_dir.join("mojang");
             let local_manifest = mojang_meta_dir.join("version_manifest_v2.json");
@@ -30,7 +33,10 @@ pub async fn raw_mojang_version(
     Path(version): Path<String>,
 ) -> impl IntoResponse {
     match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
+        StorageFormat::Json {
+            meta_directory,
+            generated_directory: _,
+        } => {
             let metadata_dir = std::path::Path::new(meta_directory);
             let mojang_meta_dir = metadata_dir.join("mojang");
             let versions_dir = mojang_meta_dir.join("versions");

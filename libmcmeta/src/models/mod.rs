@@ -184,3 +184,81 @@ impl<'de> Deserialize<'de> for GradleSpecifier {
         s.parse().map_err(serde::de::Error::custom)
     }
 }
+
+pub mod validation {
+    pub fn is_some<T>(obj: Option<T>) -> Result<(), serde_valid::validation::Error> {
+        if !obj.is_some() {
+            return Err(serde_valid::validation::Error::Custom(
+                "Must be some".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+pub mod merge {
+    pub use merge::Merge;
+    pub use merge::{bool, num, ord, vec};
+
+    /// generic overwrite stratagy
+    pub fn overwrite<T>(left: &mut T, right: T) {
+        *left = right
+    }
+
+    /// Merge strategies for `Option`
+    pub mod option {
+        /// Overwrite `left` with `right` only if `left` is `None`.
+        pub fn overwrite_none<T>(left: &mut Option<T>, right: Option<T>) {
+            if left.is_none() {
+                *left = right;
+            }
+        }
+
+        /// If both `left` and `right` are `Some`, recursively merge the two.
+        /// Otherwise, fall back to `overwrite_none`.
+        pub fn recurse<T: merge::Merge>(left: &mut Option<T>, right: Option<T>) {
+            if let Some(new) = right {
+                if let Some(original) = left {
+                    original.merge(new);
+                } else {
+                    *left = Some(new);
+                }
+            }
+        }
+    }
+
+    /// Merge strategies for `HashMap`
+    pub mod hashmap {
+        use std::collections::HashMap;
+        use std::hash::Hash;
+
+        pub fn recurse<K: Eq + Hash, V: merge::Merge>(
+            left: &mut HashMap<K, V>,
+            right: HashMap<K, V>,
+        ) {
+            use std::collections::hash_map::Entry;
+
+            for (k, v) in right {
+                match left.entry(k) {
+                    Entry::Occupied(mut existing) => existing.get_mut().merge(v),
+                    Entry::Vacant(empty) => {
+                        empty.insert(v);
+                    }
+                }
+            }
+        }
+
+        pub fn recurse_some<K: Eq + Hash, V: merge::Merge>(
+            left: &mut Option<HashMap<K, V>>,
+            right: Option<HashMap<K, V>>,
+        ) {
+            if let Some(new) = right {
+                if let Some(original) = left {
+                    recurse(original, new);
+                } else {
+                    *left = Some(new);
+                }
+            }
+        }
+    }
+}

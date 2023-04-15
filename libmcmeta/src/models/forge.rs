@@ -1,3 +1,5 @@
+use crate::models::merge::{self, Merge};
+
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use serde_with::skip_serializing_none;
@@ -300,6 +302,71 @@ pub struct ForgeInstallerManifest {
 pub enum ForgeInstallerManifestVersion {
     Legacy(Box<ForgeLegacyInstallerManifest>),
     Modern(Box<ForgeInstallerManifest>),
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge)]
+pub struct ForgeFile {
+    #[merge(strategy = merge::overwrite)]
+    pub classifier: String,
+    #[merge(strategy = merge::overwrite)]
+    pub hash: String,
+    #[merge(strategy = merge::overwrite)]
+    pub extension: String,
+}
+
+impl ForgeFile {
+    fn filename(&self, long_version: &str) -> String {
+        format!(
+            "{}-{}-{}.{}",
+            "forge", long_version, self.classifier, self.extension
+        )
+    }
+
+    fn url(&self, long_version: &str) -> String {
+        format!(
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/{}",
+            long_version,
+            self.filename(long_version),
+        )
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge)]
+pub struct ForgeEntry {
+    #[serde(rename = "longversion")]
+    #[merge(strategy = merge::overwrite)]
+    pub long_version: String,
+    #[serde(rename = "mcversion")]
+    #[merge(strategy = merge::overwrite)]
+    pub mc_version: String,
+    #[merge(strategy = merge::overwrite)]
+    pub version: String,
+    #[merge(strategy = merge::overwrite)]
+    pub build: i64,
+    pub branch: Option<String>,
+    pub latest: Option<bool>,
+    pub recommended: Option<bool>,
+    #[merge(strategy = merge::hashmap::recurse_some)]
+    pub files: Option<HashMap<String, ForgeFile>>,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge)]
+pub struct ForgeMCVersionInfo {
+    pub latest: Option<String>,
+    pub recommended: Option<String>,
+    #[merge(strategy = merge::vec::append)]
+    pub versions: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge)]
+pub struct DerivedForgeIndex {
+    #[merge(strategy = merge::hashmap::recurse)]
+    pub versions: HashMap<String, ForgeEntry>,
+    #[serde(rename = "by_mcversion")]
+    #[merge(strategy = merge::hashmap::recurse)]
+    pub by_mc_version: HashMap<String, ForgeMCVersionInfo>,
 }
 
 #[cfg(test)]

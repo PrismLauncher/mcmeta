@@ -12,7 +12,10 @@ use crate::routes::APIResponse;
 
 pub async fn raw_forge_maven_meta(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
     match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
+        StorageFormat::Json {
+            meta_directory,
+            generated_directory: _,
+        } => {
             let metadata_dir = std::path::Path::new(meta_directory);
             let forge_meta_dir = metadata_dir.join("forge");
             let maven_meta_file = forge_meta_dir.join("maven-metadata.json");
@@ -35,7 +38,10 @@ pub async fn raw_forge_maven_meta(config: Extension<Arc<ServerConfig>>) -> impl 
 
 pub async fn raw_forge_promotions(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
     match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
+        StorageFormat::Json {
+            meta_directory,
+            generated_directory: _,
+        } => {
             let metadata_dir = std::path::Path::new(meta_directory);
             let forge_meta_dir = metadata_dir.join("forge");
             let promotions_file = forge_meta_dir.join("promotions_slim.json");
@@ -61,7 +67,10 @@ pub async fn raw_forge_version(
     Path(version): Path<String>,
 ) -> impl IntoResponse {
     match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
+        StorageFormat::Json {
+            meta_directory,
+            generated_directory: _,
+        } => {
             let metadata_dir = std::path::Path::new(meta_directory);
             let forge_meta_dir = metadata_dir.join("forge");
             let versions_dir = forge_meta_dir.join("version_manifests");
@@ -97,7 +106,10 @@ pub async fn raw_forge_version_meta(
     Path(version): Path<String>,
 ) -> impl IntoResponse {
     match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
+        StorageFormat::Json {
+            meta_directory,
+            generated_directory: _,
+        } => {
             let metadata_dir = std::path::Path::new(meta_directory);
             let forge_meta_dir = metadata_dir.join("forge");
             let versions_dir = forge_meta_dir.join("files_manifests");
@@ -133,7 +145,10 @@ pub async fn raw_forge_version_installer(
     Path(version): Path<String>,
 ) -> impl IntoResponse {
     match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
+        StorageFormat::Json {
+            meta_directory,
+            generated_directory: _,
+        } => {
             let metadata_dir = std::path::Path::new(meta_directory);
             let forge_meta_dir = metadata_dir.join("forge");
             let versions_dir = forge_meta_dir.join("installer_manifests");
