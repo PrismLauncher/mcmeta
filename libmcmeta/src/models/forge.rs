@@ -32,6 +32,69 @@ pub struct ForgeVersionClassifier {
     pub stash: Option<String>,
 }
 
+pub enum ForgeVersionClassifierExtensions {
+    Txt,
+    Zip,
+    Jar,
+    Stash,
+}
+
+impl ForgeVersionClassifierExtensions {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ForgeVersionClassifierExtensions::Txt => "txt",
+            ForgeVersionClassifierExtensions::Zip => "zip",
+            ForgeVersionClassifierExtensions::Jar => "jar",
+            ForgeVersionClassifierExtensions::Stash => "stash",
+        }
+    }
+}
+
+pub struct ForgeVersionClassifierIter<'a> {
+    classifier: &'a ForgeVersionClassifier,
+    index: usize,
+}
+
+impl ForgeVersionClassifier {
+    pub fn iter(&self) -> ForgeVersionClassifierIter<'_> {
+        ForgeVersionClassifierIter {
+            classifier: &self,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for ForgeVersionClassifierIter<'a> {
+    type Item = (ForgeVersionClassifierExtensions, &'a Option<String>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = match self.index {
+            0 => (ForgeVersionClassifierExtensions::Txt, &self.classifier.txt),
+            1 => (ForgeVersionClassifierExtensions::Zip, &self.classifier.zip),
+            2 => (ForgeVersionClassifierExtensions::Jar, &self.classifier.jar),
+            3 => (
+                ForgeVersionClassifierExtensions::Stash,
+                &self.classifier.stash,
+            ),
+            _ => return None,
+        };
+        self.index += 1;
+        Some(result)
+    }
+}
+
+impl<'a> IntoIterator for &'a ForgeVersionClassifier {
+    type Item = (ForgeVersionClassifierExtensions, &'a Option<String>);
+    type IntoIter = ForgeVersionClassifierIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ForgeVersionClassifierIter {
+            classifier: &self,
+            index: 0,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 #[skip_serializing_none]
 #[serde(deny_unknown_fields)]
@@ -50,6 +113,132 @@ pub struct ForgeVersionClassifiers {
     pub userdev3: Option<ForgeVersionClassifier>,
     #[serde(rename = "src.zip")]
     pub src_zip: Option<ForgeVersionClassifier>,
+}
+
+pub enum ForgeVersionClassifierNames {
+    Changelog,
+    Installer,
+    Mdk,
+    Universal,
+    Userdev,
+    Sources,
+    Javadoc,
+    Client,
+    Src,
+    Server,
+    Launcher,
+    Userdev3,
+    SrcZip,
+}
+
+impl ForgeVersionClassifierNames {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ForgeVersionClassifierNames::Changelog => "changelog",
+            ForgeVersionClassifierNames::Installer => "installer",
+            ForgeVersionClassifierNames::Mdk => "mdk",
+            ForgeVersionClassifierNames::Universal => "universal",
+            ForgeVersionClassifierNames::Userdev => "userdev",
+            ForgeVersionClassifierNames::Sources => "sources",
+            ForgeVersionClassifierNames::Javadoc => "javadoc",
+            ForgeVersionClassifierNames::Client => "client",
+            ForgeVersionClassifierNames::Src => "src",
+            ForgeVersionClassifierNames::Server => "server",
+            ForgeVersionClassifierNames::Launcher => "launcher",
+            ForgeVersionClassifierNames::Userdev3 => "userdev3",
+            ForgeVersionClassifierNames::SrcZip => "src.zip",
+        }
+    }
+}
+
+pub struct ForgeVersionClassifiersIter<'a> {
+    classifiers: &'a ForgeVersionClassifiers,
+    index: usize,
+}
+
+impl ForgeVersionClassifiers {
+    pub fn iter(&self) -> ForgeVersionClassifiersIter<'_> {
+        ForgeVersionClassifiersIter {
+            classifiers: &self,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a ForgeVersionClassifiers {
+    type Item = (
+        ForgeVersionClassifierNames,
+        &'a Option<ForgeVersionClassifier>,
+    );
+    type IntoIter = ForgeVersionClassifiersIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ForgeVersionClassifiersIter {
+            classifiers: &self,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for ForgeVersionClassifiersIter<'a> {
+    type Item = (
+        ForgeVersionClassifierNames,
+        &'a Option<ForgeVersionClassifier>,
+    );
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = match self.index {
+            0 => (
+                ForgeVersionClassifierNames::Changelog,
+                &self.classifiers.changelog,
+            ),
+            1 => (
+                ForgeVersionClassifierNames::Installer,
+                &self.classifiers.installer,
+            ),
+            2 => (ForgeVersionClassifierNames::Mdk, &self.classifiers.mdk),
+            3 => (
+                ForgeVersionClassifierNames::Universal,
+                &self.classifiers.universal,
+            ),
+            4 => (
+                ForgeVersionClassifierNames::Userdev,
+                &self.classifiers.userdev,
+            ),
+            5 => (
+                ForgeVersionClassifierNames::Sources,
+                &self.classifiers.sources,
+            ),
+            6 => (
+                ForgeVersionClassifierNames::Javadoc,
+                &self.classifiers.javadoc,
+            ),
+            7 => (
+                ForgeVersionClassifierNames::Client,
+                &self.classifiers.client,
+            ),
+            8 => (ForgeVersionClassifierNames::Src, &self.classifiers.src),
+            9 => (
+                ForgeVersionClassifierNames::Server,
+                &self.classifiers.server,
+            ),
+            10 => (
+                ForgeVersionClassifierNames::Launcher,
+                &self.classifiers.launcher,
+            ),
+            11 => (
+                ForgeVersionClassifierNames::Userdev3,
+                &self.classifiers.userdev3,
+            ),
+            12 => (
+                ForgeVersionClassifierNames::SrcZip,
+                &self.classifiers.src_zip,
+            ),
+            _ => return None,
+        };
+        self.index += 1;
+        Some(result)
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Validate)]
@@ -332,7 +521,7 @@ impl ForgeFile {
 }
 
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct ForgeEntry {
     #[serde(rename = "longversion")]
     #[merge(strategy = merge::overwrite)]
@@ -343,7 +532,7 @@ pub struct ForgeEntry {
     #[merge(strategy = merge::overwrite)]
     pub version: String,
     #[merge(strategy = merge::overwrite)]
-    pub build: i64,
+    pub build: i32,
     pub branch: Option<String>,
     pub latest: Option<bool>,
     pub recommended: Option<bool>,
@@ -352,7 +541,7 @@ pub struct ForgeEntry {
 }
 
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct ForgeMCVersionInfo {
     pub latest: Option<String>,
     pub recommended: Option<String>,
@@ -360,7 +549,7 @@ pub struct ForgeMCVersionInfo {
     pub versions: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge)]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct DerivedForgeIndex {
     #[merge(strategy = merge::hashmap::recurse)]
     pub versions: HashMap<String, ForgeEntry>,

@@ -1,4 +1,4 @@
-use libmcmeta::models::forge::{ForgeMavenMetadata, ForgeMavenPromotions};
+use libmcmeta::models::forge::{ForgeMavenMetadata, ForgeMavenPromotions, ForgeVersionMeta};
 use serde::Deserialize;
 use serde_valid::Validate;
 use tracing::debug;
@@ -67,4 +67,20 @@ pub async fn load_maven_promotions() -> Result<ForgeMavenPromotions> {
         serde_json::from_str(&body).map_err(|err| MetadataError::from_json_err(err, &body))?;
     promotions.validate()?;
     Ok(promotions)
+}
+
+pub async fn load_single_forge_files_manifest(url: &str) -> Result<ForgeVersionMeta> {
+    let client = reqwest::Client::new();
+
+    let body = client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    let manifest: ForgeVersionMeta =
+        serde_json::from_str(&body).map_err(|err| MetadataError::from_json_err(err, &body))?;
+    manifest.validate()?;
+    Ok(manifest)
 }
