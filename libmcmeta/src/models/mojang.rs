@@ -1,9 +1,26 @@
+use core::ops::Deref;
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use serde_with::skip_serializing_none;
 use std::collections::HashMap;
 
-use crate::models::{GradleSpecifier, MetaVersion};
+use crate::models::{
+    GradleSpecifier, Library, MetaVersion, MojangArtifact, MojangArtifactBase, MojangAssets,
+    MojangLibrary, MojangLibraryDownloads, META_FORMAT_VERSION,
+};
+
+static SUPPORTED_LAUNCHER_VERSION: i32 = 21;
+static SUPPORTED_COMPLIANCE_LEVEL: i32 = 1;
+static DEFAULT_JAVA_MAJOR: i32 = 8;
+
+lazy_static! {
+    static ref COMPATIBLE_JAVA_MAPPINGS: HashMap<i32, Vec<i32>> = {
+        let mut m = HashMap::new();
+        m.insert(16, vec![17]);
+        m
+    };
+}
 
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone, Validate)]
@@ -79,12 +96,29 @@ pub struct VersionDownloads {
     pub server_mappings: Option<VersionDownload>,
 }
 
-#[skip_serializing_none]
+fn default_java_version_component() -> String {
+    "jre-legacy".to_string()
+}
+fn default_java_version_major_version() -> i32 {
+    8
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone, Validate)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct JavaVersion {
+    #[serde(default = "default_java_version_component")]
     pub component: String,
+    #[serde(default = "default_java_version_major_version")]
     pub major_version: i32,
+}
+
+impl Default for JavaVersion {
+    fn default() -> Self {
+        Self {
+            component: default_java_version_component(),
+            major_version: default_java_version_major_version(),
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -376,7 +410,11 @@ fn default_library_patch_patch_additional_libraries() -> bool {
 
 impl LibraryPatch {
     pub fn applies(&self, target: &Library) -> bool {
-        return self.patch_match.contains(target);
+        if let Some(name) = &target.name {
+            self.patch_match.contains(name)
+        } else {
+            false
+        }
     }
 }
 
@@ -423,40 +461,16 @@ pub struct MojangLogging {
 }
 
 fn mojang_logging_validate_type(
-    logging_type: String,
+    logging_type: &String,
 ) -> Result<(), serde_valid::validation::Error> {
-    if !vec!["log4j2-xml"].contains(&logging_type) {
+    let valid_logging_types = vec!["log4j2-xml"];
+    if !valid_logging_types.contains(&logging_type.as_str()) {
         Err(serde_valid::validation::Error::Custom(format!(
             "invalid log type: {}",
             &logging_type
         )))
     } else {
         Ok(())
-    }
-}
-
-fn default_java_version_component() -> String {
-    "jre-legacy".to_string()
-}
-fn default_java_version_major_version() -> i32 {
-    8
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct JavaVersion {
-    #[serde(default = "default_java_version_component")]
-    pub component: String,
-    #[serde(default = "default_java_version_major_version")]
-    pub major_version: i32,
-}
-
-impl Default for JavaVersion {
-    fn default() -> Self {
-        Self {
-            component: default_java_version_component(),
-            major_version: default_java_version_major_version(),
-        }
     }
 }
 
@@ -471,8 +485,9 @@ pub struct MojangVersion {
     pub libraries: Option<Vec<MojangLibrary>>,                  // TODO: optional?
     pub main_class: Option<String>,
     pub applet_class: Option<String>,
-    pub processArguments: Option<String>,
+    pub process_arguments: Option<String>,
     pub minecraft_arguments: Option<String>,
+    #[validate(custom(mojang_version_validate_minimum_launcher_version))]
     pub minimum_launcher_version: Option<i32>,
     pub release_time: Option<String>,
     pub time: Option<String>,
@@ -480,76 +495,142 @@ pub struct MojangVersion {
     pub version_type: Option<String>,
     pub inherits_from: Option<String>,
     pub logging: Option<HashMap<String, MojangLogging>>, // TODO improve this?
+    #[validate(custom(mojang_version_validate_compliance_level))]
     pub compliance_level: Option<i32>,
-    pub javaVersion: Option<JavaVersion>,
+    pub java_version: Option<JavaVersion>,
 }
-// class MojangVersion(MetaBase):
-//     @validator("minimum_launcher_version")
-//     def validate_minimum_launcher_version(cls, v):
-//         assert v <= SUPPORTED_LAUNCHER_VERSION
-//         return v
 
-//     @validator("compliance_level")
-//     def validate_compliance_level(cls, v):
-//         assert v <= SUPPORTED_COMPLIANCE_LEVEL
-//         return v
+fn mojang_version_validate_minimum_launcher_version(
+    minimum_launcher_version: &Option<i32>,
+) -> Result<(), serde_valid::validation::Error> {
+    if let Some(minimum_launcher_version) = minimum_launcher_version {
+        if minimum_launcher_version <= &SUPPORTED_LAUNCHER_VERSION {
+            return Ok(());
+        }
+    }
+    Err(serde_valid::validation::Error::Custom(format!(
+        "Invalid launcher version `{:?}`",
+        &minimum_launcher_version
+    )))
+}
 
-//     def to_meta_version(self, name: str, uid: str, version: str) -> MetaVersion:
-//         main_jar = None
-//         addn_traits = None
-//         new_type = self.type
-//         compatible_java_majors = None
-//         if self.id:
-//             client_download = self.downloads["client"]
-//             artifact = MojangArtifact(
-//                 url=client_download.url,
-//                 sha1=client_download.sha1,
-//                 size=client_download.size,
-//             )
-//             downloads = MojangLibraryDownloads(artifact=artifact)
-//             main_jar = Library(
-//                 name=GradleSpecifier("com.mojang", "minecraft", self.id, "client"),
-//                 downloads=downloads,
-//             )
+fn mojang_version_validate_compliance_level(
+    compliance_level: &Option<i32>,
+) -> Result<(), serde_valid::validation::Error> {
+    if let Some(compliance_level) = compliance_level {
+        if compliance_level <= &SUPPORTED_COMPLIANCE_LEVEL {
+            return Ok(());
+        }
+    }
+    Err(serde_valid::validation::Error::Custom(format!(
+        "Invalid compliance level `{:?}`",
+        &compliance_level
+    )))
+}
 
-//         if not self.compliance_level:  # both == 0 and is None
-//             pass
-//         elif self.compliance_level == 1:
-//             if not addn_traits:
-//                 addn_traits = []
-//             addn_traits.append("XR:Initial")
-//         else:
-//             raise Exception(f"Unsupported compliance level {self.compliance_level}")
+impl MojangVersion {
+    pub fn to_meta_version(&self, name: &str, uid: &str, version: &str) -> MetaVersion {
+        let mut main_jar = None;
+        let mut addn_traits = None;
+        let mut new_type = self.version_type.clone();
+        let mut compatible_java_majors = None;
+        if !self.id.is_empty() {
+            let downloads = self.downloads.clone().expect("Missing downloads");
+            let client_download = downloads
+                .get("client")
+                .expect("Missing `client` in downlods");
+            let artifact = MojangArtifact {
+                url: client_download.url.clone(),
+                sha1: client_download.sha1.clone(),
+                size: client_download.size,
+                path: None,
+            };
+            let downloads = MojangLibraryDownloads {
+                artifact: Some(artifact),
+                classifiers: None,
+            };
+            main_jar = Some(Library {
+                name: Some(GradleSpecifier {
+                    group: "com.mojang".to_string(),
+                    artifact: "minecraft".to_string(),
+                    version: self.id.clone(),
+                    classifier: Some("client".to_string()),
+                    extension: None,
+                }),
+                downloads: Some(downloads),
+                extract: None,
+                natives: None,
+                rules: None,
+                url: None,
+                mmc_hint: None,
+            });
+        }
+        match self.compliance_level {
+            None => {}
+            Some(0) => {}
+            Some(1) => {
+                if addn_traits.is_none() {
+                    addn_traits = Some(vec![]);
+                }
+            }
+            Some(l) => {
+                panic!("Unsupported compliance level {}", l);
+            }
+        }
 
-//         major = DEFAULT_JAVA_MAJOR
-//         if (
-//             self.javaVersion is not None
-//         ):  # some versions don't have this. TODO: maybe maintain manual overrides
-//             major = self.javaVersion.major_version
+        let mut major = DEFAULT_JAVA_MAJOR;
 
-//         compatible_java_majors = [major]
-//         if (
-//             major in COMPATIBLE_JAVA_MAPPINGS
-//         ):  # add more compatible Java versions, e.g. 16 and 17 both work for MC 1.17
-//             compatible_java_majors += COMPATIBLE_JAVA_MAPPINGS[major]
+        if let Some(java_version) = &self.java_version {
+            major = java_version.major_version;
+        }
 
-//         if new_type == "pending":  # experiments from upstream are type=pending
-//             new_type = "experiment"
+        compatible_java_majors = Some(vec![major]);
 
-//         return MetaVersion(
-//             name=name,
-//             uid=uid,
-//             version=version,
-//             asset_index=self.asset_index,
-//             libraries=self.libraries,
-//             main_class=self.main_class,
-//             minecraft_arguments=self.minecraft_arguments,
-//             release_time=self.release_time,
-//             type=new_type,
-//             compatible_java_majors=compatible_java_majors,
-//             additional_traits=addn_traits,
-//             main_jar=main_jar,
-//         )
+        if let Some(mappings) = COMPATIBLE_JAVA_MAPPINGS.get(&major) {
+            compatible_java_majors
+                .as_mut()
+                .unwrap()
+                .append(&mut mappings.clone());
+        }
+
+        if let Some(t) = &new_type {
+            if t == "pending" {
+                new_type = Some("experiment".to_string());
+            }
+        }
+
+        let new_libs = if let Some(libraries) = &self.libraries {
+            Some(libraries.iter().map(|lib| lib.into()).collect())
+        } else {
+            None
+        };
+
+        MetaVersion {
+            format_version: META_FORMAT_VERSION,
+            name: name.to_string(),
+            uid: uid.to_string(),
+            version: version.to_string(),
+            asset_index: self.asset_index.clone(),
+            libraries: new_libs,
+            main_class: self.main_class.clone(),
+            minecraft_arguments: self.minecraft_arguments.clone(),
+            release_time: self.release_time.clone(),
+            version_type: new_type,
+            compatible_java_majors: compatible_java_majors,
+            additional_traits: addn_traits,
+            main_jar: main_jar,
+            order: None,
+            volatile: None,
+            requires: None,
+            conflicts: None,
+            maven_files: None,
+            jar_mods: None,
+            applet_class: None,
+            additional_tweakers: None,
+            additional_jvm_args: None,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

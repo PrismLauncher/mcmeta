@@ -1,6 +1,6 @@
 use crate::models::merge::{self, Merge};
 
-use crate::models::GradleSpecifier;
+use crate::models::{GradleSpecifier, MojangLibrary};
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use serde_with::skip_serializing_none;
@@ -601,6 +601,7 @@ pub struct ForgeInstallerProfileInstallSection {
     pub profile_name: String,
     #[merge(strategy = merge::overwrite)]
     pub target: String,
+    #[merge(strategy = merge::overwrite)]
     pub path: GradleSpecifier,
     #[merge(strategy = merge::overwrite)]
     pub version: String,
@@ -682,7 +683,7 @@ pub struct ForgeOptional {
     pub desc: Option<String>,
     #[merge(strategy = merge::option::overwrite_some)]
     pub url: Option<String>,
-    #[merge(strategy = merge::option::recurse)]
+    #[merge(strategy = merge::option::overwrite_some)]
     pub artifact: Option<GradleSpecifier>,
     #[merge(strategy = merge::option::overwrite_some)]
     pub maven: Option<String>,
@@ -714,6 +715,72 @@ pub struct ForgeLegacyInfo {
 pub struct ForgeLegacyInfoList {
     #[merge(strategy = merge::hashmap::recurse)]
     pub number: HashMap<String, ForgeLegacyInfo>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+pub struct DataSpec {
+    #[merge(strategy = merge::option::overwrite_some)]
+    client: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    server: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+pub struct ProcessorSpec {
+    #[merge(strategy = merge::option::overwrite_some)]
+    jar: Option<String>,
+    #[merge(strategy = merge::option_vec::append_some)]
+    classpath: Option<Vec<String>>,
+    #[merge(strategy = merge::option_vec::append_some)]
+    args: Option<Vec<String>>,
+    #[merge(strategy = merge::option_hashmap::overwrite_key_some)]
+    outputs: Option<HashMap<String, String>>,
+    #[merge(strategy = merge::option_vec::append_some)]
+    sides: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+pub struct ForgeInstallerProfileV2 {
+    #[merge(skip)]
+    _comment: Option<Vec<String>>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    spec: Option<i32>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    profile: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    version: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    icon: Option<String>,
+    #[serde(rename = "json")]
+    #[merge(strategy = merge::option::overwrite_some)]
+    json_data: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    path: Option<GradleSpecifier>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    logo: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    minecraft: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    welcome: Option<String>,
+    #[merge(strategy = merge::option_hashmap::recurse_some)]
+    data: Option<HashMap<String, DataSpec>>,
+    #[merge(strategy = merge::option_vec::append_some)]
+    processors: Option<Vec<ProcessorSpec>>,
+    #[merge(strategy = merge::option_vec::append_some)]
+    libraries: Option<Vec<MojangLibrary>>,
+    #[serde(rename = "mirrorList")]
+    #[merge(strategy = merge::option::overwrite_some)]
+    mirror_list: Option<String>,
+    #[serde(rename = "erverJarPath")]
+    #[merge(strategy = merge::option::overwrite_some)]
+    server_jar_path: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+pub struct InstallerInfo {
+    pub sha1hash: Option<String>,
+    pub sha256hash: Option<String>,
+    pub size: Option<u64>,
 }
 
 pub struct ForgeProcessedVersion {

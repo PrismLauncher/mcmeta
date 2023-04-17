@@ -11,23 +11,20 @@ custom_error! { pub ModelError
     InvalidGradleSpecifier { specifier: String } = "Invalid Gradle specifier '{specifier}'",
 }
 
+static META_FORMAT_VERSION: i32 = 1;
+
 /// A Gradle specifier.
-#[derive(Debug, PartialEq, Eq, Clone, merge::Merge, Default)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct GradleSpecifier {
     /// Group of the artifact.
-    #[merge(strategy = merge::overwrite)]
     pub group: String,
     /// Artifact name.
-    #[merge(strategy = merge::overwrite)]
     pub artifact: String,
     /// Version of the artifact.
-    #[merge(strategy = merge::overwrite)]
     pub version: String,
     /// File extension of the artifact.
-    #[merge(strategy = merge::overwrite)]
     pub extension: Option<String>,
     /// Classifier of the artifact.
-    #[merge(strategy = merge::overwrite)]
     pub classifier: Option<String>,
 }
 
@@ -195,29 +192,42 @@ impl<'de> Deserialize<'de> for GradleSpecifier {
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge)]
 #[serde(rename_all = "camelCase")]
 pub struct MojangArtifactBase {
+    #[merge(strategy = merge::option::overwrite_some)]
     pub sha1: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub size: Option<i32>,
+    #[merge(strategy = merge::overwrite)]
     pub url: String,
     #[serde(flatten)]
+    #[merge(strategy = merge::hashmap::overwrite_key)]
     pub unknown: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangAssets {
+    #[merge(strategy = merge::option::overwrite_some)]
     pub sha1: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub size: Option<i32>,
+    #[merge(strategy = merge::overwrite)]
     pub url: String,
+    #[merge(strategy = merge::overwrite)]
     pub id: String,
+    #[merge(strategy = merge::overwrite)]
     pub total_size: i32,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangArtifact {
+    #[merge(strategy = merge::option::overwrite_some)]
     pub sha1: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub size: Option<i32>,
+    #[merge(strategy = merge::overwrite)]
     pub url: String,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub path: Option<String>,
 }
 
@@ -260,7 +270,7 @@ pub struct OSRule {
     pub version: Option<String>,
 }
 
-fn os_rule_name_must_be_os(name: String) -> Result<(), serde_valid::validation::Error> {
+fn os_rule_name_must_be_os(name: &String) -> Result<(), serde_valid::validation::Error> {
     let valid_os_names = vec![
         "osx",
         "linux",
@@ -270,8 +280,11 @@ fn os_rule_name_must_be_os(name: String) -> Result<(), serde_valid::validation::
         "linux-arm64",
         "linux-arm32",
     ];
-    if !valid_os_names.contains(&name) {
-        Err(format!("`{}` not a valid os name", &name))
+    if !valid_os_names.contains(&name.as_str()) {
+        Err(serde_valid::validation::Error::Custom(format!(
+            "`{}` not a valid os name",
+            &name
+        )))
     } else {
         Ok(())
     }
@@ -288,13 +301,13 @@ pub struct MojangRule {
 }
 
 fn mojang_rule_action_must_be_allow_disallow(
-    action: String,
+    action: &String,
 ) -> Result<(), serde_valid::validation::Error> {
-    if !vec!["allow", "disallow"].contains(&action) {
-        Err(format!(
+    if !vec!["allow", "disallow"].contains(&action.as_str()) {
+        Err(serde_valid::validation::Error::Custom(format!(
             "`{}` not a valid action, must be `allow` or `disallow`",
             &action
-        ))
+        )))
     } else {
         Ok(())
     }
@@ -320,11 +333,11 @@ impl Deref for MojangRules {
 pub struct MojangLibrary {
     #[merge(strategy = merge::option::recurse)]
     pub extract: Option<MojangLibraryExtractRules>,
-    #[merge(strategy = merge::option::recurse)]
+    #[merge(strategy = merge::option::overwrite_some)]
     pub name: Option<GradleSpecifier>,
     #[merge(strategy = merge::option::recurse)]
     pub downloads: Option<MojangLibraryDownloads>,
-    #[merge(strategy = merge::option::recurse)]
+    #[merge(strategy = merge::option_hashmap::overwrite_key_some)]
     pub natives: Option<HashMap<String, String>>,
     #[merge(strategy = merge::option::recurse)]
     pub rules: Option<MojangRules>,
@@ -335,11 +348,11 @@ pub struct MojangLibrary {
 pub struct Library {
     #[merge(strategy = merge::option::recurse)]
     pub extract: Option<MojangLibraryExtractRules>,
-    #[merge(strategy = merge::option::recurse)]
+    #[merge(strategy = merge::option::overwrite_some)]
     pub name: Option<GradleSpecifier>,
     #[merge(strategy = merge::option::recurse)]
     pub downloads: Option<MojangLibraryDownloads>,
-    #[merge(strategy = merge::option::recurse)]
+    #[merge(strategy = merge::option_hashmap::overwrite_key_some)]
     pub natives: Option<HashMap<String, String>>,
     #[merge(strategy = merge::option::recurse)]
     pub rules: Option<MojangRules>,
@@ -347,7 +360,59 @@ pub struct Library {
     url: Option<String>,
     #[serde(rename = "MMC-hint")]
     #[merge(strategy = merge::option::overwrite_some)]
-    mmcHint: Option<String>,
+    mmc_hint: Option<String>,
+}
+
+impl From<MojangLibrary> for Library {
+    fn from(item: MojangLibrary) -> Self {
+        Self {
+            extract: item.extract,
+            name: item.name,
+            downloads: item.downloads,
+            natives: item.natives,
+            rules: item.rules,
+            url: None,
+            mmc_hint: None,
+        }
+    }
+}
+
+impl From<Library> for MojangLibrary {
+    fn from(item: Library) -> Self {
+        Self {
+            extract: item.extract,
+            name: item.name,
+            downloads: item.downloads,
+            natives: item.natives,
+            rules: item.rules,
+        }
+    }
+}
+
+impl From<&MojangLibrary> for Library {
+    fn from(item: &MojangLibrary) -> Self {
+        Self {
+            extract: item.extract.clone(),
+            name: item.name.clone(),
+            downloads: item.downloads.clone(),
+            natives: item.natives.clone(),
+            rules: item.rules.clone(),
+            url: None,
+            mmc_hint: None,
+        }
+    }
+}
+
+impl From<&Library> for MojangLibrary {
+    fn from(item: &Library) -> Self {
+        Self {
+            extract: item.extract.clone(),
+            name: item.name.clone(),
+            downloads: item.downloads.clone(),
+            natives: item.natives.clone(),
+            rules: item.rules.clone(),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge, Default)]
@@ -364,30 +429,52 @@ pub struct Dependency {
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MetaVersion {
+    #[merge(strategy = merge::overwrite)]
     pub format_version: i32,
+    #[merge(strategy = merge::overwrite)]
     pub name: String,
+    #[merge(strategy = merge::overwrite)]
     pub version: String,
+    #[merge(strategy = merge::overwrite)]
     pub uid: String,
     #[serde(rename = "type")]
+    #[merge(strategy = merge::option::overwrite_some)]
     pub version_type: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub order: Option<i32>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub volatile: Option<bool>,
+    #[merge(strategy = merge::option_vec::append_some)]
     pub requires: Option<Vec<Dependency>>,
+    #[merge(strategy = merge::option_vec::append_some)]
     pub conflicts: Option<Vec<Dependency>>,
+    #[merge(strategy = merge::option_vec::append_some)]
     pub libraries: Option<Vec<Library>>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub asset_index: Option<MojangAssets>,
+    #[merge(strategy = merge::option_vec::append_some)]
     pub maven_files: Option<Vec<Library>>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub main_jar: Option<Library>,
+    #[merge(strategy = merge::option_vec::append_some)]
     pub jar_mods: Option<Vec<Library>>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub main_class: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub applet_class: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub minecraft_arguments: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub release_time: Option<String>,
+    #[merge(strategy = merge::option_vec::append_some)]
     pub compatible_java_majors: Option<Vec<i32>>,
+    #[merge(strategy = merge::option_vec::append_some)]
     pub additional_traits: Option<Vec<String>>,
     #[serde(rename = "+tweakers")]
+    #[merge(strategy = merge::option_vec::append_some)]
     pub additional_tweakers: Option<Vec<String>>,
     #[serde(rename = "+jvmArgs")]
+    #[merge(strategy = merge::option_vec::append_some)]
     pub additional_jvm_args: Option<Vec<String>>,
 }
 
@@ -460,6 +547,14 @@ pub mod merge {
                 }
             }
         }
+
+        pub fn overwrite_key<K: Eq + Hash, V>(left: &mut HashMap<K, V>, right: HashMap<K, V>) {
+            use std::collections::hash_map::Entry;
+
+            for (k, v) in right {
+                left.insert(k, v);
+            }
+        }
     }
 
     /// Merge strategies for `Option<HashMap>`
@@ -475,6 +570,20 @@ pub mod merge {
             if let Some(new) = right {
                 if let Some(original) = left {
                     hashmap::recurse(original, new);
+                } else {
+                    *left = Some(new);
+                }
+            }
+        }
+
+        pub fn overwrite_key_some<K: Eq + Hash, V>(
+            left: &mut Option<HashMap<K, V>>,
+            right: Option<HashMap<K, V>>,
+        ) {
+            use std::collections::hash_map::Entry;
+            if let Some(new) = right {
+                if let Some(original) = left {
+                    hashmap::overwrite_key(original, new);
                 } else {
                     *left = Some(new);
                 }

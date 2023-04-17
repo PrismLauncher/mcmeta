@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 fn json_matching_brace(c: char) -> char {
     match c {
         '[' => ']',
@@ -167,4 +169,32 @@ pub fn get_json_context_back(err: &serde_json::Error, body: &str, max_len: usize
                 .0;
     }
     ctx
+}
+
+pub enum HashAlgo {
+    Sha1,
+    Sha256,
+}
+
+pub fn filehash(path: &std::path::PathBuf, algo: HashAlgo) -> Result<String> {
+    match algo {
+        HashAlgo::Sha1 => {
+            use sha1::{Digest, Sha1};
+
+            let mut hasher = Sha1::new();
+            let mut file = std::fs::File::open(path)?;
+            let _bytes_written = std::io::copy(&mut file, &mut hasher)?;
+            let hash_bytes = hasher.finalize();
+            Ok(format!("{:X}", hash_bytes))
+        }
+        HashAlgo::Sha256 => {
+            use sha2::{Digest, Sha256};
+
+            let mut hasher = Sha256::new();
+            let mut file = std::fs::File::open(path)?;
+            let _bytes_written = std::io::copy(&mut file, &mut hasher)?;
+            let hash_bytes = hasher.finalize();
+            Ok(format!("{:X}", hash_bytes))
+        }
+    }
 }

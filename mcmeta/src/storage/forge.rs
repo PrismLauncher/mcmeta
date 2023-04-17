@@ -4,10 +4,16 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
 
-use crate::{app_config::MetadataConfig, download, storage::StorageFormat};
+use crate::{
+    app_config::MetadataConfig,
+    download,
+    storage::StorageFormat,
+    utils::{filehash, HashAlgo},
+};
 use libmcmeta::models::forge::{
-    DerivedForgeIndex, ForgeEntry, ForgeFile, ForgeLegacyInfoList, ForgeMCVersionInfo,
-    ForgeProcessedVersion, ForgeVersionMeta,
+    DerivedForgeIndex, ForgeEntry, ForgeFile, ForgeInstallerProfile, ForgeInstallerProfileV2,
+    ForgeLegacyInfoList, ForgeMCVersionInfo, ForgeProcessedVersion, ForgeVersionMeta,
+    InstallerInfo,
 };
 use libmcmeta::models::mojang::MojangVersion;
 
@@ -322,106 +328,98 @@ async fn update_forge_legacy_metadata_json(
             if !profile_path.is_file() {
                 use std::io::Read;
 
-                let jar = zip::ZipArchive::new(std::fs::File::open(&jar_path)?)?;
+                let mut jar = zip::ZipArchive::new(std::fs::File::open(&jar_path)?)?;
 
-                let mut profile_zip_entry = jar.by_name("version.json")?;
-                let mut version_data = String::new();
-                profile_zip_entry.read_to_string(&mut version_data)?;
+                {
+                    // version.json
+                    let mut version_zip_entry = jar.by_name("version.json")?;
+                    let mut version_data = String::new();
+                    version_zip_entry.read_to_string(&mut version_data)?;
 
-                let mojang_version: MojangVersion = serde_json::from_str(&version_data)?;
+                    let mojang_version: MojangVersion = serde_json::from_str(&version_data)?;
 
-                let version_file_json = serde_json::to_string_pretty(&mojang_version)?;
-                std::fs::write(&version_file_path, version_file_json)?;
+                    let version_file_json = serde_json::to_string_pretty(&mojang_version)?;
+                    std::fs::write(&version_file_path, version_file_json)?;
+                }
+
+                {
+                    //install_profile.json
+                    let mut profile_zip_entry = jar.by_name("install_profile.json")?;
+                    let mut install_profile_data = String::new();
+                    profile_zip_entry.read_to_string(&mut install_profile_data)?;
+
+                    let forge_profile_json: Result<String> = {
+                        let forge_profile =
+                            serde_json::from_str::<ForgeInstallerProfile>(&install_profile_data);
+                        if let Ok(profile) = forge_profile {
+                            Ok(serde_json::to_string_pretty(&profile)?)
+                        } else {
+                            let forge_profile_v2 = serde_json::from_str::<ForgeInstallerProfileV2>(
+                                &install_profile_data,
+                            );
+                            if let Ok(profile) = forge_profile_v2 {
+                                Ok(serde_json::to_string_pretty(&profile)?)
+                            } else {
+                                Err(forge_profile_v2.unwrap_err().into())
+                            }
+                        }
+                    };
+
+                    if let Ok(forge_profile_json) = forge_profile_json {
+                        std::fs::write(&profile_path, forge_profile_json)?;
+                    } else {
+                        if version.is_supported() {
+                            return Err(forge_profile_json.unwrap_err());
+                        } else {
+                            debug!(
+                                "Forge Version {} is not supported and won't be generated later.",
+                                &version.long_version
+                            )
+                        }
+                    }
+                }
             }
+
+            if !installer_info_path.is_file() {
+                let mut installer_info = InstallerInfo::default();
+                installer_info.sha1hash = Some(filehash(&jar_path, HashAlgo::Sha1)?);
+                installer_info.sha256hash = Some(filehash(&jar_path, HashAlgo::Sha256)?);
+                installer_info.size = Some(jar_path.metadata()?.len());
+            }
+        } else {
+            // ignore the two versions without install manifests and jar mod class files
+
+            // # TODO: fix those versions?
+            // if version.mc_version_sane == "1.6.1":
+            //     continue
+
+            // # only gather legacy info if it's missing
+            // if not os.path.isfile(LEGACYINFO_PATH):
+            //     # grab the jar/zip if it's not there
+            //     if not os.path.isfile(jar_path):
+            //         rfile = sess.get(version.url(), stream=True)
+            //         rfile.raise_for_status()
+            //         with open(jar_path, "wb") as f:
+            //             for chunk in rfile.iter_content(chunk_size=128):
+            //                 f.write(chunk)
+            //     # find the latest timestamp in the zip file
+            //     tstamp = datetime.fromtimestamp(0)
+            //     with zipfile.ZipFile(jar_path) as jar:
+            //         for info in jar.infolist():
+            //             tstamp_new = datetime(*info.date_time)
+            //             if tstamp_new > tstamp:
+            //                 tstamp = tstamp_new
+            //     legacy_info = ForgeLegacyInfo()
+            //     legacy_info.release_time = tstamp
+            //     legacy_info.sha1 = filehash(jar_path, hashlib.sha1)
+            //     legacy_info.sha256 = filehash(jar_path, hashlib.sha256)
+            //     legacy_info.size = os.path.getsize(jar_path)
+            //     legacy_info_list.number[key] = legacy_info
         }
     }
-    // for key, entry in new_index.versions.items():
 
-    //     if version.uses_installer():
+    // only write legacy info if it's missing
 
-    //         eprint("Processing %s" % version.url())
-    //         # harvestables from the installer
-    //         if not os.path.isfile(profile_path):
-    //             print(jar_path)
-    //             with zipfile.ZipFile(jar_path) as jar:
-    //                 with suppress(KeyError):
-    //                     with jar.open("version.json") as profile_zip_entry:
-    //                         version_data = profile_zip_entry.read()
-
-    //                         # Process: does it parse?
-    //                         MojangVersion.parse_raw(version_data)
-
-    //                         with open(version_file_path, "wb") as versionJsonFile:
-    //                             versionJsonFile.write(version_data)
-    //                             versionJsonFile.close()
-
-    //                 with jar.open("install_profile.json") as profile_zip_entry:
-    //                     install_profile_data = profile_zip_entry.read()
-
-    //                     # Process: does it parse?
-    //                     is_parsable = False
-    //                     exception = None
-    //                     try:
-    //                         ForgeInstallerProfile.parse_raw(install_profile_data)
-    //                         is_parsable = True
-    //                     except ValidationError as err:
-    //                         exception = err
-    //                     try:
-    //                         ForgeInstallerProfileV2.parse_raw(install_profile_data)
-    //                         is_parsable = True
-    //                     except ValidationError as err:
-    //                         exception = err
-
-    //                     if not is_parsable:
-    //                         if version.is_supported():
-    //                             raise exception
-    //                         else:
-    //                             eprint(
-    //                                 "Version %s is not supported and won't be generated later."
-    //                                 % version.long_version
-    //                             )
-
-    //                     with open(profile_path, "wb") as profileFile:
-    //                         profileFile.write(install_profile_data)
-    //                         profileFile.close()
-
-    //         # installer info v1
-    //         if not os.path.isfile(installer_info_path):
-    //             installer_info = InstallerInfo()
-    //             installer_info.sha1hash = filehash(jar_path, hashlib.sha1)
-    //             installer_info.sha256hash = filehash(jar_path, hashlib.sha256)
-    //             installer_info.size = os.path.getsize(jar_path)
-    //             installer_info.write(installer_info_path)
-    //     else:
-    //         # ignore the two versions without install manifests and jar mod class files
-    //         # TODO: fix those versions?
-    //         if version.mc_version_sane == "1.6.1":
-    //             continue
-
-    //         # only gather legacy info if it's missing
-    //         if not os.path.isfile(LEGACYINFO_PATH):
-    //             # grab the jar/zip if it's not there
-    //             if not os.path.isfile(jar_path):
-    //                 rfile = sess.get(version.url(), stream=True)
-    //                 rfile.raise_for_status()
-    //                 with open(jar_path, "wb") as f:
-    //                     for chunk in rfile.iter_content(chunk_size=128):
-    //                         f.write(chunk)
-    //             # find the latest timestamp in the zip file
-    //             tstamp = datetime.fromtimestamp(0)
-    //             with zipfile.ZipFile(jar_path) as jar:
-    //                 for info in jar.infolist():
-    //                     tstamp_new = datetime(*info.date_time)
-    //                     if tstamp_new > tstamp:
-    //                         tstamp = tstamp_new
-    //             legacy_info = ForgeLegacyInfo()
-    //             legacy_info.release_time = tstamp
-    //             legacy_info.sha1 = filehash(jar_path, hashlib.sha1)
-    //             legacy_info.sha256 = filehash(jar_path, hashlib.sha256)
-    //             legacy_info.size = os.path.getsize(jar_path)
-    //             legacy_info_list.number[key] = legacy_info
-
-    // # only write legacy info if it's missing
     // if not os.path.isfile(LEGACYINFO_PATH):
     //     legacy_info_list.write(LEGACYINFO_PATH)
 
