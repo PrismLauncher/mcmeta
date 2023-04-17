@@ -4,14 +4,19 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
 
-use libmcmeta::models::forge::{
-    DerivedForgeIndex, ForgeEntry, ForgeFile, ForgeMCVersionInfo, ForgeVersionMeta,
-};
-
 use crate::{app_config::MetadataConfig, download, storage::StorageFormat};
+use libmcmeta::models::forge::{
+    DerivedForgeIndex, ForgeEntry, ForgeFile, ForgeLegacyInfoList, ForgeMCVersionInfo,
+    ForgeProcessedVersion, ForgeVersionMeta,
+};
+use libmcmeta::models::mojang::MojangVersion;
+
+lazy_static! {
+    pub static ref BAD_FORGE_VERSIONS: Vec<&'static str> = vec!["1.12.2-14.23.5.2851"];
+}
 
 fn process_results<T>(results: Vec<Result<T>>) -> Result<Vec<T>> {
-    let err_flag = false;
+    let mut err_flag = false;
     let mut ok_results = vec![];
     for res in results {
         if let Ok(ok_res) = res {
@@ -38,15 +43,18 @@ pub async fn initialize_forge_metadata(
             meta_directory,
             generated_directory: _,
         } => {
-            return initialize_forge_metadata_json(metadata_cfg, meta_directory)
+            update_forge_metadata_json(metadata_cfg, meta_directory)
                 .await
-                .with_context(|| "Failed to initializ Forge metadata in the json format")
+                .with_context(|| "Failed to update Forge metadata in the json format")?;
+            update_forge_legacy_metadata_json(metadata_cfg, meta_directory)
+                .await
+                .with_context(|| "Failed to update Forge legacy metadata in the json format")
         }
         StorageFormat::Database => todo!(),
     }
 }
 
-async fn initialize_forge_metadata_json(
+async fn update_forge_metadata_json(
     metadata_cfg: &MetadataConfig,
     meta_directory: &str,
 ) -> Result<()> {
@@ -61,7 +69,7 @@ async fn initialize_forge_metadata_json(
         std::fs::create_dir_all(&forge_meta_dir)?;
     }
 
-    let main_metadata = download::forge::load_maven_metadata().await?;
+    let maven_metadata = download::forge::load_maven_metadata().await?;
     let promotions_metadata = download::forge::load_maven_promotions().await?;
 
     let promoted_key_expression = regex::Regex::new(
@@ -81,7 +89,7 @@ async fn initialize_forge_metadata_json(
     //           promotions (among other errors).
     debug!("Processing Forge Promotions");
 
-    for (promo_key, shortversion) in promotions_metadata.promos {
+    for (promo_key, shortversion) in &promotions_metadata.promos {
         match promoted_key_expression.captures(&promo_key) {
             None => {
                 warn!("Skipping promotion {}, the key did not parse:", promo_key);
@@ -114,15 +122,8 @@ async fn initialize_forge_metadata_json(
         }
     }
 
-    let version_expression = regex::Regex::new(
-        "^(?P<mc>[0-9a-zA-Z_\\.]+)-(?P<ver>[0-9\\.]+\\.(?P<build>[0-9]+))(-(?P<branch>[a-zA-Z0-9\\.]+))?$"
-    ).expect("Version regex must compile");
-
     debug!("Processing Forge Versions");
-
-    // let tasks = vec![];
-
-    let forge_version_pairs = main_metadata
+    let forge_version_pairs = maven_metadata
         .versions
         .iter()
         .map(|(k, v)| v.iter().map(|lv| (k.clone(), lv.clone())))
@@ -130,12 +131,18 @@ async fn initialize_forge_metadata_json(
         .collect::<Vec<_>>();
     let tasks = stream::iter(forge_version_pairs)
         .map(|(mc_version, long_version)| {
+            let version_expression = regex::Regex::new(
+                "^(?P<mc>[0-9a-zA-Z_\\.]+)-(?P<ver>[0-9\\.]+\\.(?P<build>[0-9]+))(-(?P<branch>[a-zA-Z0-9\\.]+))?$"
+            ).expect("Version regex must compile");
+            let forge_dir =  forge_meta_dir.clone();
+            let recommended = recommended_set.clone();
             tokio::spawn(async move {
                 match version_expression.captures(&long_version) {
                     None => Err(anyhow!(
                         "Forge long version {} does not parse!",
                         long_version
                     )),
+                    
                     Some(captures) => {
                         if let None = captures.name("mc") {
                             Err(anyhow!(
@@ -143,18 +150,14 @@ async fn initialize_forge_metadata_json(
                                 long_version
                             ))
                         } else {
-                            let build = captures.name("build").unwrap().as_str().parse::<i32>()?;
-                            let version = captures.name("ver").unwrap().as_str();
-                            let branch = captures.name("branch").unwrap().as_str();
-
                             process_forge_version(
-                                &forge_meta_dir,
-                                &recommended_set,
+                                &forge_dir,
+                                &recommended,
                                 &mc_version,
                                 &long_version,
-                                build,
-                                version,
-                                branch,
+                                captures.name("build").unwrap().as_str().parse::<i32>()?,
+                                captures.name("ver").unwrap().as_str(),
+                                captures.name("branch").unwrap().as_str(),
                             )
                             .await
                         }
@@ -182,86 +185,159 @@ async fn initialize_forge_metadata_json(
     for forge_version in forge_versions {
         let mc_version = forge_version.mc_version.clone();
         let long_version = forge_version.long_version.clone();
-        new_index.versions[&forge_version.long_version] = forge_version;
-        if !new_index.by_mc_version.contains_key(&mc_version) {
-            new_index.by_mc_version[&mc_version] = ForgeMCVersionInfo::default();
-        }
-        new_index.by_mc_version[&mc_version]
+        new_index
             .versions
-            .push(long_version);
+            .insert(forge_version.long_version.clone(), forge_version.clone());
+        if !new_index.by_mc_version.contains_key(&mc_version) {
+            new_index
+                .by_mc_version
+                .insert(mc_version.clone(), ForgeMCVersionInfo::default());
+        }
+        new_index
+            .by_mc_version
+            .get_mut(&mc_version)
+            .expect(&format!(
+                "Missing forge info for minecraft version {}",
+                &mc_version
+            ))
+            .versions
+            .push(long_version.clone());
         // NOTE: we add this later after the fact. The forge promotions file lies about these.
         // if let Some(true) = forge_version.latest {
         //     new_index.by_mc_version[&mc_version].latest = Some(long_version.clone());
         // }
         if let Some(true) = forge_version.recommended {
-            new_index.by_mc_version[&mc_version].recommended = Some(long_version.clone());
+            new_index
+                .by_mc_version
+                .get_mut(&mc_version)
+                .expect(&format!(
+                    "Missing forge info for minecraft version {}",
+                    &mc_version
+                ))
+                .recommended = Some(long_version.clone());
         }
     }
 
-    // print("")
-    // print("Post processing promotions and adding missing 'latest':")
-    // for mc_version, info in new_index.by_mc_version.items():
-    //     latest_version = info.versions[-1]
-    //     info.latest = latest_version
-    //     new_index.versions[latest_version].latest = True
-    //     print("Added %s as latest for %s" % (latest_version, mc_version))
+    debug!("Post-processing forge promotions and adding missing 'latest'");
 
-    // print("")
-    // print("Dumping index files...")
+    for (mc_version, info) in &mut new_index.by_mc_version {
+        let latest_version = info.versions.last().expect(&format!(
+            "No forge versions for minecraft version {}",
+            mc_version
+        ));
+        info.latest = Some(latest_version.to_string());
+        info!("Added {} as latest for {}", latest_version, mc_version)
+    }
 
-    // with open(UPSTREAM_DIR + "/forge/maven-metadata.json", "w", encoding="utf-8") as f:
-    //     json.dump(main_json, f, sort_keys=True, indent=4)
+    debug!("Dumping forge index files");
 
-    // with open(UPSTREAM_DIR + "/forge/promotions_slim.json", "w", encoding="utf-8") as f:
-    //     json.dump(promotions_json, f, sort_keys=True, indent=4)
+    {
+        let local_maven_metadata_file = forge_meta_dir.join("maven-metadata.json");
+        let maven_metadata_json = serde_json::to_string_pretty(&maven_metadata)?;
+        std::fs::write(&local_maven_metadata_file, maven_metadata_json)?;
+    }
 
-    // new_index.write(UPSTREAM_DIR + "/forge/derived_index.json")
+    {
+        let local_promotions_metadata_file = forge_meta_dir.join("promotions_slim.json");
+        let promotions_metadata_json = serde_json::to_string_pretty(&promotions_metadata)?;
+        std::fs::write(&local_promotions_metadata_file, promotions_metadata_json)?;
+    }
 
-    // legacy_info_list = ForgeLegacyInfoList()
+    {
+        let local_derived_index_file = forge_meta_dir.join("derived_index.json");
+        let derived_index_json = serde_json::to_string_pretty(&new_index)?;
+        std::fs::write(&local_derived_index_file, derived_index_json)?;
+    }
 
-    // print("Grabbing installers and dumping installer profiles...")
-    // # get the installer jars - if needed - and get the installer profiles out of them
+    Ok(())
+}
+
+async fn update_forge_legacy_metadata_json(
+    metadata_cfg: &MetadataConfig,
+    meta_directory: &str,
+) -> Result<()> {
+    let metadata_dir = std::path::Path::new(meta_directory);
+    let forge_meta_dir = metadata_dir.join("forge");
+
+    if !forge_meta_dir.exists() {
+        info!(
+            "Forge metadata directory at {} does not exist, creating it",
+            forge_meta_dir.display()
+        );
+        std::fs::create_dir_all(&forge_meta_dir)?;
+    }
+
+    let mut legacy_info_list = ForgeLegacyInfoList::default();
+
+    debug!("Grabbing forge installers and dumping installer profiles...");
+
+    let derived_index_file = forge_meta_dir.join("derived_index.json");
+    let derived_index =
+        serde_json::from_str::<DerivedForgeIndex>(&std::fs::read_to_string(&derived_index_file)?)?;
+
+    // get the installer jars - if needed - and get the installer profiles out of them
+    for (key, entry) in derived_index.versions {
+        debug!("Updating Forge {}", &key);
+        let version = ForgeProcessedVersion::new(&entry);
+
+        if version.url().is_none() {
+            debug!("Skipping forge build {} with no valid files", &entry.build);
+            continue;
+        }
+
+        if BAD_FORGE_VERSIONS.contains(&version.long_version.as_str()) {
+            debug!("Skipping bad forge version {}", &version.long_version);
+            continue;
+        }
+
+        let jar_path = forge_meta_dir
+            .join("jars")
+            .join(&version.filename().expect("Missing forge filename"));
+
+        let version_json_name = format!("{}.json", &version.long_version);
+
+        if version.uses_installer() {
+            let installer_info_path = forge_meta_dir
+                .join("installer_info")
+                .join(&version_json_name);
+            let profile_path = forge_meta_dir
+                .join("installer_manifests")
+                .join(&version_json_name);
+            let version_file_path = forge_meta_dir
+                .join("version_manifests")
+                .join(&version_json_name);
+
+            let installer_refresh_required =
+                !profile_path.exists() || !installer_info_path.exists();
+
+            if installer_refresh_required {
+                // grab the installer if it's not there
+                if !jar_path.exists() {
+                    debug!("Downloading forge jar from {}", &version.url().unwrap());
+                    download::download_binary_file(&jar_path, &version.url().unwrap()).await?
+                }
+            }
+
+            debug!("Processing forge jar from {}", &version.url().unwrap());
+            if !profile_path.is_file() {
+                use std::io::Read;
+
+                let jar = zip::ZipArchive::new(std::fs::File::open(&jar_path)?)?;
+
+                let mut profile_zip_entry = jar.by_name("version.json")?;
+                let mut version_data = String::new();
+                profile_zip_entry.read_to_string(&mut version_data)?;
+
+                let mojang_version: MojangVersion = serde_json::from_str(&version_data)?;
+
+                let version_file_json = serde_json::to_string_pretty(&mojang_version)?;
+                std::fs::write(&version_file_path, version_file_json)?;
+            }
+        }
+    }
     // for key, entry in new_index.versions.items():
-    //     eprint("Updating Forge %s" % key)
-    //     if entry.mc_version is None:
-    //         eprint("Skipping %d with invalid MC version" % entry.build)
-    //         continue
-
-    //     version = ForgeVersion(entry)
-    //     if version.url() is None:
-    //         eprint("Skipping %d with no valid files" % version.build)
-    //         continue
-    //     if version.long_version in BAD_VERSIONS:
-    //         eprint(f"Skipping bad version {version.long_version}")
-    //         continue
-
-    //     jar_path = os.path.join(UPSTREAM_DIR, JARS_DIR, version.filename())
 
     //     if version.uses_installer():
-    //         installer_info_path = (
-    //             UPSTREAM_DIR + "/forge/installer_info/%s.json" % version.long_version
-    //         )
-    //         profile_path = (
-    //             UPSTREAM_DIR
-    //             + "/forge/installer_manifests/%s.json" % version.long_version
-    //         )
-    //         version_file_path = (
-    //             UPSTREAM_DIR + "/forge/version_manifests/%s.json" % version.long_version
-    //         )
-
-    //         installer_refresh_required = not os.path.isfile(
-    //             profile_path
-    //         ) or not os.path.isfile(installer_info_path)
-
-    //         if installer_refresh_required:
-    //             # grab the installer if it's not there
-    //             if not os.path.isfile(jar_path):
-    //                 eprint("Downloading %s" % version.url())
-    //                 rfile = sess.get(version.url(), stream=True)
-    //                 rfile.raise_for_status()
-    //                 with open(jar_path, "wb") as f:
-    //                     for chunk in rfile.iter_content(chunk_size=128):
-    //                         f.write(chunk)
 
     //         eprint("Processing %s" % version.url())
     //         # harvestables from the installer
@@ -363,7 +439,7 @@ async fn process_forge_version(
 ) -> Result<ForgeEntry> {
     let files = get_single_forge_files_manifest(forge_meta_dir, long_version).await?;
 
-    let is_recommended = recommended_set.contains(&version);
+    let is_recommended = recommended_set.contains(version);
 
     let entry = ForgeEntry {
         long_version: long_version.to_string(),
@@ -413,8 +489,7 @@ async fn get_single_forge_files_manifest(
     let mut ret_map: HashMap<String, ForgeFile> = HashMap::new();
 
     for (classifier, extension_obj) in &files_metadata.classifiers {
-        let index = 0;
-        let count = 0;
+        let mut count = 0;
 
         if let Some(extension_obj) = extension_obj {
             for (extension, hash_type) in extension_obj {
@@ -428,11 +503,11 @@ async fn get_single_forge_files_manifest(
                             extension: extension.as_str().to_owned(),
                         };
                         if count == 0 {
-                            ret_map[classifier.as_str()] = file_obj;
+                            ret_map.insert(classifier.as_str().to_string(), file_obj);
                             count += 1;
                         } else {
                             return Err(anyhow!(
-                                "{}: Multiple objects detected for classifier {}: {}",
+                                "{}: Multiple objects detected for classifier {}: {:?}",
                                 long_version,
                                 extension.as_str(),
                                 &extension_obj

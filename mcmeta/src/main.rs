@@ -17,6 +17,9 @@ mod routes;
 mod storage;
 mod utils;
 
+#[macro_use]
+extern crate lazy_static;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok(); // This line loads the environment variables from the ".env" file.

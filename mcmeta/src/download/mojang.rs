@@ -6,7 +6,7 @@ use tracing::debug;
 
 use anyhow::{anyhow, Result};
 
-use crate::download::errors::MetadataError;
+use crate::download::{self, errors::MetadataError};
 
 fn default_download_url() -> String {
     "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json".to_string()
@@ -32,6 +32,11 @@ pub async fn load_manifest() -> Result<MojangVersionManifest> {
     let client = reqwest::Client::new();
     let config = DownloadConfig::from_config()?;
 
+    debug!(
+        "Fetching minecraft client manifest from {:#?}",
+        &config.manifest_url
+    );
+
     let body = client
         .get(&config.manifest_url)
         .send()
@@ -49,7 +54,10 @@ pub async fn load_manifest() -> Result<MojangVersionManifest> {
 pub async fn load_version_manifest(version_url: &str) -> Result<MinecraftVersion> {
     let client = reqwest::Client::new();
 
-    debug!("Fetching version manifest from {:#?}", version_url);
+    debug!(
+        "Fetching minecraft version manifest from {:#?}",
+        version_url
+    );
 
     let body = client
         .get(version_url)
@@ -65,18 +73,14 @@ pub async fn load_version_manifest(version_url: &str) -> Result<MinecraftVersion
 }
 
 pub async fn load_zipped_version(version_url: &str) -> Result<MinecraftVersion> {
-    use std::io::prelude::*;
-
-    let client = reqwest::Client::new();
+    use std::io::Read;
 
     debug!("Fetching zipped version from {:#?}", version_url);
 
-    let file_response = client.get(version_url).send().await?.error_for_status()?;
-
     let tmp_dir = TempDir::new("mcmeta_mojang_zip")?;
     let dest_path = {
-        let fname = file_response
-            .url()
+        let url = reqwest::Url::parse(version_url)?;
+        let fname = url
             .path_segments()
             .and_then(|segments| segments.last())
             .and_then(|name| if name.is_empty() { None } else { Some(name) })
@@ -85,12 +89,7 @@ pub async fn load_zipped_version(version_url: &str) -> Result<MinecraftVersion> 
         tmp_dir.path().join(fname)
     };
 
-    {
-        // write to file, context drop to flush and close
-        let mut file = std::fs::File::create(&dest_path)?;
-        let mut content = std::io::Cursor::new(file_response.bytes().await?);
-        std::io::copy(&mut content, &mut file)?;
-    }
+    download::download_binary_file(&dest_path, version_url).await?;
 
     let file = std::fs::File::open(&dest_path)?;
 
@@ -102,7 +101,7 @@ pub async fn load_zipped_version(version_url: &str) -> Result<MinecraftVersion> 
         if zfile.name().ends_with(".json") {
             debug!("Found {} as version json", zfile.name());
             let mut contents = String::new();
-            zfile.read_to_string(&mut contents).unwrap();
+            zfile.read_to_string(&mut contents)?;
 
             manifest = Some(
                 serde_json::from_str(&contents)

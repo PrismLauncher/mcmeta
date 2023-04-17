@@ -3,6 +3,8 @@ use serde_valid::Validate;
 use serde_with::skip_serializing_none;
 use std::collections::HashMap;
 
+use crate::models::{GradleSpecifier, MetaVersion};
+
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone, Validate)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -311,6 +313,243 @@ pub struct OldSnapshotEntry {
 pub struct OldSnapshotIndex {
     pub old_snapshots: Vec<OldSnapshotEntry>,
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LegacyOverrideEntry {
+    main_class: Option<String>,
+    applet_class: Option<String>,
+    release_time: Option<String>,
+    #[serde(rename = "+traits")]
+    additional_traits: Option<Vec<String>>,
+    #[serde(rename = "+jvmArgs")]
+    additional_jvm_args: Option<Vec<String>>,
+}
+
+impl LegacyOverrideEntry {
+    pub fn apply_onto_meta_version(self, meta_version: &MetaVersion, legacy: bool) {
+        // simply hard override classes
+        // meta_version.main_class = self.main_class
+        // meta_version.applet_class = self.applet_class
+        // # if we have an updated release time (more correct than Mojang), use it
+        // if self.release_time:
+        //     meta_version.release_time = self.release_time
+
+        // # add traits, if any
+        // if self.additional_traits:
+        //     if not meta_version.additional_traits:
+        //         meta_version.additional_traits = []
+        //     meta_version.additional_traits += self.additional_traits
+
+        // if self.additional_jvm_args:
+        //     if not meta_version.additional_jvm_args:
+        //         meta_version.additional_jvm_args = []
+        //     meta_version.additional_jvm_args += self.additional_jvm_args
+
+        // if legacy:
+        //     # remove all libraries - they are not needed for legacy
+        //     meta_version.libraries = None
+        //     # remove minecraft arguments - we use our own hardcoded ones
+        //     meta_version.minecraft_arguments = None
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct LegacyOverrideIndex {
+    versions: HashMap<String, LegacyOverrideEntry>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct LibraryPatch {
+    #[serde(rename = "match")]
+    pub patch_match: Vec<GradleSpecifier>,
+    #[serde(rename = "override")]
+    pub patch_override: Option<Library>,
+    pub additionalLibraries: Option<Vec<Library>>,
+    #[serde(default = "default_library_patch_patch_additional_libraries")]
+    pub patchAdditionalLibraries: bool,
+}
+
+fn default_library_patch_patch_additional_libraries() -> bool {
+    false
+}
+
+impl LibraryPatch {
+    pub fn applies(&self, target: &Library) -> bool {
+        return self.patch_match.contains(target);
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct LibraryPatches {
+    root: Vec<LibraryPatch>,
+}
+
+impl Deref for LibraryPatches {
+    type Target = Vec<LibraryPatch>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.root
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct MojangArgumentObject {}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub enum MojangArgument {
+    String(String),
+    Object(MojangArgumentObject),
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct MojangArguments {
+    pub game: Option<Vec<MojangArgument>>, // mixture of strings and objects
+    pub jvm: Option<Vec<MojangArgument>>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct MojangLoggingArtifact {
+    id: String,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+pub struct MojangLogging {
+    file: MojangLoggingArtifact,
+    argument: String,
+    #[serde(rename = "type")]
+    #[validate(custom(mojang_logging_validate_type))]
+    logging_type: String,
+}
+
+fn mojang_logging_validate_type(
+    logging_type: String,
+) -> Result<(), serde_valid::validation::Error> {
+    if !vec!["log4j2-xml"].contains(&logging_type) {
+        Err(serde_valid::validation::Error::Custom(format!(
+            "invalid log type: {}",
+            &logging_type
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn default_java_version_component() -> String {
+    "jre-legacy".to_string()
+}
+fn default_java_version_major_version() -> i32 {
+    8
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct JavaVersion {
+    #[serde(default = "default_java_version_component")]
+    pub component: String,
+    #[serde(default = "default_java_version_major_version")]
+    pub major_version: i32,
+}
+
+impl Default for JavaVersion {
+    fn default() -> Self {
+        Self {
+            component: default_java_version_component(),
+            major_version: default_java_version_major_version(),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MojangVersion {
+    pub id: String, // TODO: optional?
+    pub arguments: Option<MojangArguments>,
+    pub asset_index: Option<MojangAssets>,
+    pub assets: Option<String>,
+    pub downloads: Option<HashMap<String, MojangArtifactBase>>, // TODO improve this?
+    pub libraries: Option<Vec<MojangLibrary>>,                  // TODO: optional?
+    pub main_class: Option<String>,
+    pub applet_class: Option<String>,
+    pub processArguments: Option<String>,
+    pub minecraft_arguments: Option<String>,
+    pub minimum_launcher_version: Option<i32>,
+    pub release_time: Option<String>,
+    pub time: Option<String>,
+    #[serde(rename = "type")]
+    pub version_type: Option<String>,
+    pub inherits_from: Option<String>,
+    pub logging: Option<HashMap<String, MojangLogging>>, // TODO improve this?
+    pub compliance_level: Option<i32>,
+    pub javaVersion: Option<JavaVersion>,
+}
+// class MojangVersion(MetaBase):
+//     @validator("minimum_launcher_version")
+//     def validate_minimum_launcher_version(cls, v):
+//         assert v <= SUPPORTED_LAUNCHER_VERSION
+//         return v
+
+//     @validator("compliance_level")
+//     def validate_compliance_level(cls, v):
+//         assert v <= SUPPORTED_COMPLIANCE_LEVEL
+//         return v
+
+//     def to_meta_version(self, name: str, uid: str, version: str) -> MetaVersion:
+//         main_jar = None
+//         addn_traits = None
+//         new_type = self.type
+//         compatible_java_majors = None
+//         if self.id:
+//             client_download = self.downloads["client"]
+//             artifact = MojangArtifact(
+//                 url=client_download.url,
+//                 sha1=client_download.sha1,
+//                 size=client_download.size,
+//             )
+//             downloads = MojangLibraryDownloads(artifact=artifact)
+//             main_jar = Library(
+//                 name=GradleSpecifier("com.mojang", "minecraft", self.id, "client"),
+//                 downloads=downloads,
+//             )
+
+//         if not self.compliance_level:  # both == 0 and is None
+//             pass
+//         elif self.compliance_level == 1:
+//             if not addn_traits:
+//                 addn_traits = []
+//             addn_traits.append("XR:Initial")
+//         else:
+//             raise Exception(f"Unsupported compliance level {self.compliance_level}")
+
+//         major = DEFAULT_JAVA_MAJOR
+//         if (
+//             self.javaVersion is not None
+//         ):  # some versions don't have this. TODO: maybe maintain manual overrides
+//             major = self.javaVersion.major_version
+
+//         compatible_java_majors = [major]
+//         if (
+//             major in COMPATIBLE_JAVA_MAPPINGS
+//         ):  # add more compatible Java versions, e.g. 16 and 17 both work for MC 1.17
+//             compatible_java_majors += COMPATIBLE_JAVA_MAPPINGS[major]
+
+//         if new_type == "pending":  # experiments from upstream are type=pending
+//             new_type = "experiment"
+
+//         return MetaVersion(
+//             name=name,
+//             uid=uid,
+//             version=version,
+//             asset_index=self.asset_index,
+//             libraries=self.libraries,
+//             main_class=self.main_class,
+//             minecraft_arguments=self.minecraft_arguments,
+//             release_time=self.release_time,
+//             type=new_type,
+//             compatible_java_majors=compatible_java_majors,
+//             additional_traits=addn_traits,
+//             main_jar=main_jar,
+//         )
 
 #[cfg(test)]
 mod tests {

@@ -12,7 +12,7 @@ use anyhow::{anyhow, Context, Result};
 use crate::{app_config::MetadataConfig, download, storage::StorageFormat};
 
 fn process_results<T>(results: Vec<Result<T>>) -> Result<Vec<T>> {
-    let err_flag = false;
+    let mut err_flag = false;
     let mut ok_results = vec![];
     for res in results {
         if let Ok(ok_res) = res {

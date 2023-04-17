@@ -1,5 +1,6 @@
 use crate::models::merge::{self, Merge};
 
+use crate::models::GradleSpecifier;
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use serde_with::skip_serializing_none;
@@ -494,6 +495,7 @@ pub enum ForgeInstallerManifestVersion {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge)]
+#[serde(deny_unknown_fields)]
 pub struct ForgeFile {
     #[merge(strategy = merge::overwrite)]
     pub classifier: String,
@@ -504,14 +506,14 @@ pub struct ForgeFile {
 }
 
 impl ForgeFile {
-    fn filename(&self, long_version: &str) -> String {
+    pub fn filename(&self, long_version: &str) -> String {
         format!(
             "{}-{}-{}.{}",
             "forge", long_version, self.classifier, self.extension
         )
     }
 
-    fn url(&self, long_version: &str) -> String {
+    pub fn url(&self, long_version: &str) -> String {
         format!(
             "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/{}",
             long_version,
@@ -522,6 +524,7 @@ impl ForgeFile {
 
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ForgeEntry {
     #[serde(rename = "longversion")]
     #[merge(strategy = merge::overwrite)]
@@ -533,29 +536,291 @@ pub struct ForgeEntry {
     pub version: String,
     #[merge(strategy = merge::overwrite)]
     pub build: i32,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub branch: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub latest: Option<bool>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub recommended: Option<bool>,
-    #[merge(strategy = merge::hashmap::recurse_some)]
+    #[merge(strategy = merge::option_hashmap::recurse_some)]
     pub files: Option<HashMap<String, ForgeFile>>,
 }
 
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ForgeMCVersionInfo {
+    #[merge(strategy = merge::option::overwrite_some)]
     pub latest: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
     pub recommended: Option<String>,
     #[merge(strategy = merge::vec::append)]
     pub versions: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+#[serde(deny_unknown_fields)]
 pub struct DerivedForgeIndex {
     #[merge(strategy = merge::hashmap::recurse)]
     pub versions: HashMap<String, ForgeEntry>,
     #[serde(rename = "by_mcversion")]
     #[merge(strategy = merge::hashmap::recurse)]
     pub by_mc_version: HashMap<String, ForgeMCVersionInfo>,
+}
+
+/// Example content
+/// ```json
+/// "install": {
+///     "profileName": "Forge",
+///     "target":"Forge8.9.0.753",
+///     "path":"net.minecraftforge:minecraftforge:8.9.0.753",
+///     "version":"Forge 8.9.0.753",
+///     "filePath":"minecraftforge-universal-1.6.1-8.9.0.753.jar",
+///     "welcome":"Welcome to the simple Forge installer.",
+///     "minecraft":"1.6.1",
+///     "logo":"/big_logo.png",
+///     "mirrorList": "http://files.minecraftforge.net/mirror-brand.list"
+/// },
+/// "install": {
+///     "profileName": "forge",
+///     "target":"1.11-forge1.11-13.19.0.2141",
+///     "path":"net.minecraftforge:forge:1.11-13.19.0.2141",
+///     "version":"forge 1.11-13.19.0.2141",
+///     "filePath":"forge-1.11-13.19.0.2141-universal.jar",
+///     "welcome":"Welcome to the simple forge installer.",
+///     "minecraft":"1.11",
+///     "mirrorList" : "http://files.minecraftforge.net/mirror-brand.list",
+///     "logo":"/big_logo.png",
+///     "modList":"none"
+/// },
+/// ```
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ForgeInstallerProfileInstallSection {
+    #[merge(strategy = merge::overwrite)]
+    pub profile_name: String,
+    #[merge(strategy = merge::overwrite)]
+    pub target: String,
+    pub path: GradleSpecifier,
+    #[merge(strategy = merge::overwrite)]
+    pub version: String,
+    #[merge(strategy = merge::overwrite)]
+    pub file_path: String,
+    #[merge(strategy = merge::overwrite)]
+    pub welcome: String,
+    #[merge(strategy = merge::overwrite)]
+    pub minecraft: String,
+    #[merge(strategy = merge::overwrite)]
+    pub logo: String,
+    #[merge(strategy = merge::overwrite)]
+    pub mirror_list: String,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub mod_list: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ForgeLibrary {
+    #[merge(strategy = merge::overwrite)]
+    pub url: Option<String>,
+    #[serde(rename = "serverreq")]
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub server_req: Option<bool>,
+    #[serde(rename = "clientreq")]
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub client_req: Option<bool>,
+    #[merge(strategy = merge::option_vec::append_some)]
+    pub checksums: Option<Vec<String>>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub comment: Option<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ForgeVersionFile {
+    #[merge(strategy = merge::option_vec::append_some)]
+    pub libraries: Option<Vec<ForgeLibrary>>, // overrides Mojang libraries
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub inherits_from: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub jar: Option<String>,
+}
+
+/// Example content:
+/// ```json
+/// "optionals": [
+///     {
+///         "name": "Mercurius",
+///         "client": true,
+///         "server": true,
+///         "default": true,
+///         "inject": true,
+///         "desc": "A mod that collects statistics about Minecraft and your system.<br>Useful for Forge to understand how Minecraft/Forge are used.",
+///         "url": "http://www.minecraftforge.net/forum/index.php?topic=43278.0",
+///         "artifact": "net.minecraftforge:MercuriusUpdater:1.11.2",
+///         "maven": "http://maven.minecraftforge.net/"
+///     }
+/// ]
+/// ```
+#[skip_serializing_none]
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ForgeOptional {
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub name: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub client: Option<bool>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub server: Option<bool>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub default: Option<bool>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub inject: Option<bool>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub desc: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub url: Option<String>,
+    #[merge(strategy = merge::option::recurse)]
+    pub artifact: Option<GradleSpecifier>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub maven: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+pub struct ForgeInstallerProfile {
+    pub install: ForgeInstallerProfileInstallSection,
+    #[serde(rename = "versionInfo")]
+    pub version_info: ForgeVersionFile,
+    #[merge(strategy = merge::option_vec::append_some)]
+    pub optionals: Option<Vec<ForgeOptional>>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+pub struct ForgeLegacyInfo {
+    #[serde(rename = "releaseTime")]
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub release_time: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub size: Option<i32>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub sha256: Option<String>,
+    #[merge(strategy = merge::option::overwrite_some)]
+    pub sha1: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
+pub struct ForgeLegacyInfoList {
+    #[merge(strategy = merge::hashmap::recurse)]
+    pub number: HashMap<String, ForgeLegacyInfo>,
+}
+
+pub struct ForgeProcessedVersion {
+    pub build: i32,
+    pub raw_version: String,
+    pub mc_version: String,
+    pub mv_version_sane: String,
+    pub branch: Option<String>,
+    pub installer_filename: Option<String>,
+    pub installer_url: Option<String>,
+    pub universal_filename: Option<String>,
+    pub universal_url: Option<String>,
+    pub changelog_url: Option<String>,
+    pub long_version: String,
+}
+
+impl ForgeProcessedVersion {
+    pub fn new(entry: &ForgeEntry) -> Self {
+        let mut ver = Self {
+            build: entry.build,
+            raw_version: entry.version.clone(),
+            mc_version: entry.mc_version.clone(),
+            mv_version_sane: entry.mc_version.replacen("_pre", "-pre", 1),
+            branch: entry.branch.clone(),
+            installer_filename: None,
+            installer_url: None,
+            universal_filename: None,
+            universal_url: None,
+            changelog_url: None,
+            long_version: format!("{}-{}", entry.mc_version, entry.version),
+        };
+        if let Some(branch) = &ver.branch {
+            ver.long_version += &format!("-{}", branch);
+        }
+
+        // to quote Scrumplex: "this comment's whole purpose is to say this: cringe"
+        if let Some(files) = &entry.files {
+            for (classifier, file) in files {
+                let extension = &file.extension;
+                let filename = file.filename(&ver.long_version);
+                let url = file.url(&ver.long_version);
+
+                if (classifier == "installer") && (extension == "jar") {
+                    ver.installer_filename = Some(filename);
+                    ver.installer_url = Some(url);
+                } else if (classifier == "universal" || classifier == "client")
+                    && (extension == "jar" || extension == "zip")
+                {
+                    ver.universal_filename = Some(filename);
+                    ver.universal_url = Some(url);
+                } else if (classifier == "changelog") && (extension == "txt") {
+                    ver.changelog_url = Some(url);
+                }
+            }
+        }
+
+        ver
+    }
+
+    pub fn name(&self) -> String {
+        format!("Forge {}", self.build)
+    }
+
+    pub fn uses_installer(&self) -> bool {
+        !(self.installer_url.is_none() || self.mc_version == "1.5.2")
+    }
+
+    pub fn filename(&self) -> Option<String> {
+        if self.uses_installer() {
+            self.installer_filename.clone()
+        } else {
+            self.universal_filename.clone()
+        }
+    }
+
+    pub fn url(&self) -> Option<String> {
+        if self.uses_installer() {
+            self.installer_url.clone()
+        } else {
+            self.universal_url.clone()
+        }
+    }
+
+    pub fn is_supported(&self) -> bool {
+        if self.url().is_none() {
+            return false;
+        }
+
+        let mut version_parts = self.raw_version.split(".");
+        let num_version_parts = self.raw_version.split(".").count();
+        if num_version_parts < 1 {
+            return false;
+        }
+
+        let major_version_str = version_parts.next().expect("Missing major version");
+        let major_version = major_version_str.parse::<i32>();
+
+        if let Ok(major_version) = major_version {
+            if major_version >= 37 {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
+        true
+    }
 }
 
 #[cfg(test)]

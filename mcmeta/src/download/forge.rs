@@ -37,6 +37,11 @@ pub async fn load_maven_metadata() -> Result<ForgeMavenMetadata> {
     let client = reqwest::Client::new();
     let config = DownloadConfig::from_config()?;
 
+    debug!(
+        "Fetching forge maven manifest from {:#?}",
+        &config.maven_url,
+    );
+
     let body = client
         .get(&config.maven_url)
         .send()
@@ -55,6 +60,11 @@ pub async fn load_maven_promotions() -> Result<ForgeMavenPromotions> {
     let client = reqwest::Client::new();
     let config = DownloadConfig::from_config()?;
 
+    debug!(
+        "Fetching forge promotions manifest from {:#?}",
+        &config.promotions_url,
+    );
+
     let body = client
         .get(&config.promotions_url)
         .send()
@@ -71,6 +81,8 @@ pub async fn load_maven_promotions() -> Result<ForgeMavenPromotions> {
 
 pub async fn load_single_forge_files_manifest(url: &str) -> Result<ForgeVersionMeta> {
     let client = reqwest::Client::new();
+
+    debug!("Fetching forge file manifest from {:#?}", url);
 
     let body = client
         .get(url)

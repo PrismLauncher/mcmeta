@@ -22,6 +22,7 @@ impl StorageFormat {
                 }
 
                 mojang::initialize_mojang_metadata(&self, metadata_cfg).await?;
+                forge::initialize_forge_metadata(&self, metadata_cfg).await?;
             }
             StorageFormat::Database => todo!(),
         }
