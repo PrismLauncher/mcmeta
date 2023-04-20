@@ -6,7 +6,7 @@ use axum::{routing::get, Extension, Router};
 use tracing::{debug, info};
 
 use anyhow::Result;
-use argparse::{ArgumentParser, Store};
+use argparse::{ArgumentParser, Store, StoreTrue};
 use dotenv::dotenv;
 use tracing_subscriber::{filter, prelude::*};
 
@@ -22,9 +22,8 @@ extern crate lazy_static;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenv().ok(); // This line loads the environment variables from the ".env" file.
-
     let mut config_path = "".to_string();
+    let mut use_dotenv = false;
     {
         // limit scope of argparse borrows
         let mut ap = ArgumentParser::new();
@@ -34,7 +33,16 @@ async fn main() -> Result<()> {
             Store,
             "Path to a json config file.",
         );
+        ap.refer(&mut use_dotenv).add_option(
+            &["--use-dotenv"],
+            StoreTrue,
+            "Load environment variables from a local .env",
+        );
         ap.parse_args_or_exit();
+    }
+
+    if use_dotenv {
+        dotenv().ok();
     }
 
     let config = Arc::new(ServerConfig::from_config(&config_path)?);

@@ -4,7 +4,7 @@ use crate::models::{GradleSpecifier, MojangLibrary};
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use serde_with::skip_serializing_none;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 pub struct ForgeMavenMetadata {
@@ -424,6 +424,8 @@ pub struct ForgeLegacyLibrary {
 #[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyVersionInfo {
+    #[serde(rename = "_comment_")]
+    pub comment: Option<Vec<String>>,
     pub id: String,
     pub time: String,
     pub release_time: String,
@@ -542,8 +544,8 @@ pub struct ForgeEntry {
     pub latest: Option<bool>,
     #[merge(strategy = merge::option::overwrite_some)]
     pub recommended: Option<bool>,
-    #[merge(strategy = merge::option_hashmap::recurse_some)]
-    pub files: Option<HashMap<String, ForgeFile>>,
+    #[merge(strategy = merge::option_btreemap::recurse_some)]
+    pub files: Option<BTreeMap<String, ForgeFile>>,
 }
 
 #[skip_serializing_none]
@@ -561,11 +563,11 @@ pub struct ForgeMCVersionInfo {
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 #[serde(deny_unknown_fields)]
 pub struct DerivedForgeIndex {
-    #[merge(strategy = merge::hashmap::recurse)]
-    pub versions: HashMap<String, ForgeEntry>,
+    #[merge(strategy = merge::btreemap::recurse)]
+    pub versions: BTreeMap<String, ForgeEntry>,
     #[serde(rename = "by_mcversion")]
-    #[merge(strategy = merge::hashmap::recurse)]
-    pub by_mc_version: HashMap<String, ForgeMCVersionInfo>,
+    #[merge(strategy = merge::btreemap::recurse)]
+    pub by_mc_version: BTreeMap<String, ForgeMCVersionInfo>,
 }
 
 /// Example content
@@ -700,11 +702,11 @@ pub struct ForgeInstallerProfile {
 
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct ForgeLegacyInfo {
-    #[serde(rename = "releaseTime")]
     #[merge(strategy = merge::option::overwrite_some)]
-    pub release_time: Option<String>,
+    #[serde(rename = "releaseTime", with = "time::serde::iso8601::option")]
+    pub release_time: Option<time::OffsetDateTime>,
     #[merge(strategy = merge::option::overwrite_some)]
-    pub size: Option<i32>,
+    pub size: Option<u64>,
     #[merge(strategy = merge::option::overwrite_some)]
     pub sha256: Option<String>,
     #[merge(strategy = merge::option::overwrite_some)]
@@ -787,7 +789,7 @@ pub struct ForgeProcessedVersion {
     pub build: i32,
     pub raw_version: String,
     pub mc_version: String,
-    pub mv_version_sane: String,
+    pub mc_version_sane: String,
     pub branch: Option<String>,
     pub installer_filename: Option<String>,
     pub installer_url: Option<String>,
@@ -803,7 +805,7 @@ impl ForgeProcessedVersion {
             build: entry.build,
             raw_version: entry.version.clone(),
             mc_version: entry.mc_version.clone(),
-            mv_version_sane: entry.mc_version.replacen("_pre", "-pre", 1),
+            mc_version_sane: entry.mc_version.replacen("_pre", "-pre", 1),
             branch: entry.branch.clone(),
             installer_filename: None,
             installer_url: None,

@@ -81,7 +81,7 @@ async fn update_mojang_metadata_json(
         HashSet::<String>::from_iter(remote_manifest.versions.iter().map(|v| v.id.clone()));
 
     let local_manifest_path = mojang_meta_dir.join("version_manifest_v2.json");
-    let pending_ids: Vec<String> = if !local_manifest_path.exists() {
+    let pending_ids: Vec<String> = if !local_manifest_path.is_file() {
         info!("Local Mojang metadata does not exist, saving it");
         let manifest_json = serde_json::to_string_pretty(&remote_manifest)?;
         std::fs::write(&local_manifest_path, manifest_json)?;
@@ -156,7 +156,7 @@ async fn update_mojang_static_metadata_json(
     }
 
     let static_experiments_path = static_dir.join("mojang").join("minecraft-experiments.json");
-    if static_experiments_path.exists() {
+    if static_experiments_path.is_file() {
         let experiments = serde_json::from_str::<ExperimentIndex>(&std::fs::read_to_string(
             &static_experiments_path,
         )?)?;
@@ -193,7 +193,7 @@ async fn update_mojang_static_metadata_json(
     let static_old_snapshots_path = static_dir
         .join("mojang")
         .join("minecraft-old-snapshots.json");
-    if static_old_snapshots_path.exists() {
+    if static_old_snapshots_path.is_file() {
         let old_snapshots = serde_json::from_str::<OldSnapshotIndex>(&std::fs::read_to_string(
             &static_old_snapshots_path,
         )?)?;
@@ -235,7 +235,7 @@ pub async fn update_mojang_version_manifest_json(
     version: &MojangVersionManifestVersion,
 ) -> Result<()> {
     let version_file = versions_dir.join(format!("{}.json", &version.id));
-    if !version_file.exists() {
+    if !version_file.is_file() {
         info!(
             "Mojang metadata for version {} does not exist, downloading it",
             &version.id
@@ -261,7 +261,7 @@ pub async fn update_mojang_experiment_json(
     version: &ExperimentEntry,
 ) -> Result<()> {
     let version_file = versions_dir.join(format!("{}.json", &version.id));
-    if !version_file.exists() {
+    if !version_file.is_file() {
         info!(
             "Mojang metadata for experiment {} does not exist, downloading it",
             &version.id
@@ -287,7 +287,7 @@ pub async fn update_mojang_old_snapshot_json(
     snapshot: &OldSnapshotEntry,
 ) -> Result<()> {
     let version_file = versions_dir.join(format!("{}.json", &snapshot.id));
-    if !version_file.exists() {
+    if !version_file.is_file() {
         info!(
             "Mojang metadata for old snapshot {} does not exist, downloading it",
             &snapshot.id

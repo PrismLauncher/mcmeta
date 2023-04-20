@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use futures::{stream, StreamExt};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use tracing::{debug, error, info, warn};
 
@@ -12,10 +12,11 @@ use crate::{
 };
 use libmcmeta::models::forge::{
     DerivedForgeIndex, ForgeEntry, ForgeFile, ForgeInstallerProfile, ForgeInstallerProfileV2,
-    ForgeLegacyInfoList, ForgeMCVersionInfo, ForgeProcessedVersion, ForgeVersionMeta,
-    InstallerInfo,
+    ForgeLegacyInfo, ForgeLegacyInfoList, ForgeMCVersionInfo, ForgeProcessedVersion,
+    ForgeVersionMeta, InstallerInfo,
 };
 use libmcmeta::models::mojang::MojangVersion;
+use libmcmeta::models::MetaMcIndexEntry;
 
 lazy_static! {
     pub static ref BAD_FORGE_VERSIONS: Vec<&'static str> = vec!["1.12.2-14.23.5.2851"];
@@ -23,20 +24,30 @@ lazy_static! {
 
 fn process_results<T>(results: Vec<Result<T>>) -> Result<Vec<T>> {
     let mut err_flag = false;
-    let mut ok_results = vec![];
-    for res in results {
-        if let Ok(ok_res) = res {
-            ok_results.push(ok_res);
-        } else {
-            error!("{}", res.err().unwrap());
-            err_flag = true;
-        }
-    }
+
+    let ok_results: Vec<T> = results
+        .into_iter()
+        .filter_map(|res: Result<T>| match res {
+            Err(err) => {
+                error!("{:?}", err);
+                err_flag = true;
+                None
+            }
+            Ok(ok_res) => Some(ok_res),
+        })
+        .collect();
     if err_flag {
         Err(anyhow!("There were errors in the results"))
     } else {
         Ok(ok_results)
     }
+}
+
+fn process_results_ok<T>(results: Vec<Result<T>>) -> Vec<T> {
+    results
+        .into_iter()
+        .filter_map(|res: Result<T>| res.ok())
+        .collect()
 }
 
 pub async fn initialize_forge_metadata(
@@ -148,7 +159,7 @@ async fn update_forge_metadata_json(
                         "Forge long version {} does not parse!",
                         long_version
                     )),
-                    
+
                     Some(captures) => {
                         if let None = captures.name("mc") {
                             Err(anyhow!(
@@ -161,9 +172,10 @@ async fn update_forge_metadata_json(
                                 &recommended,
                                 &mc_version,
                                 &long_version,
-                                captures.name("build").unwrap().as_str().parse::<i32>()?,
-                                captures.name("ver").unwrap().as_str(),
-                                captures.name("branch").unwrap().as_str(),
+                                captures.name("build").expect("Missing Forge build number").as_str().parse::<i32>()
+                                    .with_context(|| format!("Failure parsing int build number for Forge version `{}`", long_version))?,
+                                captures.name("ver").expect("Missing Forge version").as_str(),
+                                captures.name("branch").map(|b| b.as_str().to_string()),
                             )
                             .await
                         }
@@ -240,19 +252,36 @@ async fn update_forge_metadata_json(
     {
         let local_maven_metadata_file = forge_meta_dir.join("maven-metadata.json");
         let maven_metadata_json = serde_json::to_string_pretty(&maven_metadata)?;
-        std::fs::write(&local_maven_metadata_file, maven_metadata_json)?;
+        std::fs::write(&local_maven_metadata_file, maven_metadata_json).with_context(|| {
+            format!(
+                "Failure writing to file {}",
+                &local_maven_metadata_file.to_string_lossy()
+            )
+        })?;
     }
 
     {
         let local_promotions_metadata_file = forge_meta_dir.join("promotions_slim.json");
         let promotions_metadata_json = serde_json::to_string_pretty(&promotions_metadata)?;
-        std::fs::write(&local_promotions_metadata_file, promotions_metadata_json)?;
+        std::fs::write(&local_promotions_metadata_file, promotions_metadata_json).with_context(
+            || {
+                format!(
+                    "Failure writing to file {}",
+                    &local_promotions_metadata_file.to_string_lossy()
+                )
+            },
+        )?;
     }
 
     {
         let local_derived_index_file = forge_meta_dir.join("derived_index.json");
         let derived_index_json = serde_json::to_string_pretty(&new_index)?;
-        std::fs::write(&local_derived_index_file, derived_index_json)?;
+        std::fs::write(&local_derived_index_file, derived_index_json).with_context(|| {
+            format!(
+                "Failure writing to file {}",
+                &local_derived_index_file.to_string_lossy()
+            )
+        })?;
     }
 
     Ok(())
@@ -264,164 +293,118 @@ async fn update_forge_legacy_metadata_json(
 ) -> Result<()> {
     let metadata_dir = std::path::Path::new(meta_directory);
     let forge_meta_dir = metadata_dir.join("forge");
-
-    if !forge_meta_dir.exists() {
-        info!(
-            "Forge metadata directory at {} does not exist, creating it",
-            forge_meta_dir.display()
-        );
-        std::fs::create_dir_all(&forge_meta_dir)?;
-    }
+    let static_dir = std::path::Path::new(&metadata_cfg.static_directory);
+    let legacy_info_path = static_dir.join("forge").join("forge-legacyinfo.json");
 
     let mut legacy_info_list = ForgeLegacyInfoList::default();
 
     debug!("Grabbing forge installers and dumping installer profiles...");
 
     let derived_index_file = forge_meta_dir.join("derived_index.json");
-    let derived_index =
-        serde_json::from_str::<DerivedForgeIndex>(&std::fs::read_to_string(&derived_index_file)?)?;
+    let derived_index = serde_json::from_str::<DerivedForgeIndex>(
+        &std::fs::read_to_string(&derived_index_file).with_context(|| {
+            format!("Failure opening {}", &derived_index_file.to_string_lossy())
+        })?,
+    )
+    .with_context(|| {
+        format!(
+            "Failure reading json from {}",
+            &derived_index_file.to_string_lossy()
+        )
+    })?;
+
+    let derived_index_hash = filehash(&derived_index_file, HashAlgo::Sha256)?;
+
+    let last_index_path = forge_meta_dir.join("derived_index.last_index.json");
+    if last_index_path.is_file() {
+        if let Ok(last_index) = serde_json::from_str::<MetaMcIndexEntry>(
+            &std::fs::read_to_string(&last_index_path).with_context(|| {
+                format!("Failure opening {}", &last_index_path.to_string_lossy())
+            })?,
+        ) {
+            // check if we even need to regenerate
+            if last_index.hash == derived_index_hash {
+                info!("Forge index up to date. Not regenerating.");
+                return Ok(());
+            } else {
+                info!("Forge index hash did not match, regenerating...")
+            }
+        }
+    }
 
     // get the installer jars - if needed - and get the installer profiles out of them
-    for (key, entry) in derived_index.versions {
-        debug!("Updating Forge {}", &key);
-        let version = ForgeProcessedVersion::new(&entry);
+    let tasks = stream::iter(derived_index.versions)
+        .filter_map(|(key, entry)| async move {
+            info!("Updating Forge {}", &key);
+            let version = ForgeProcessedVersion::new(&entry);
 
-        if version.url().is_none() {
-            debug!("Skipping forge build {} with no valid files", &entry.build);
-            continue;
-        }
-
-        if BAD_FORGE_VERSIONS.contains(&version.long_version.as_str()) {
-            debug!("Skipping bad forge version {}", &version.long_version);
-            continue;
-        }
-
-        let jar_path = forge_meta_dir
-            .join("jars")
-            .join(&version.filename().expect("Missing forge filename"));
-
-        let version_json_name = format!("{}.json", &version.long_version);
-
-        if version.uses_installer() {
-            let installer_info_path = forge_meta_dir
-                .join("installer_info")
-                .join(&version_json_name);
-            let profile_path = forge_meta_dir
-                .join("installer_manifests")
-                .join(&version_json_name);
-            let version_file_path = forge_meta_dir
-                .join("version_manifests")
-                .join(&version_json_name);
-
-            let installer_refresh_required =
-                !profile_path.exists() || !installer_info_path.exists();
-
-            if installer_refresh_required {
-                // grab the installer if it's not there
-                if !jar_path.exists() {
-                    debug!("Downloading forge jar from {}", &version.url().unwrap());
-                    download::download_binary_file(&jar_path, &version.url().unwrap()).await?
-                }
+            if version.url().is_none() {
+                debug!("Skipping forge build {} with no valid files", &entry.build);
+                return None;
             }
 
-            debug!("Processing forge jar from {}", &version.url().unwrap());
-            if !profile_path.is_file() {
-                use std::io::Read;
-
-                let mut jar = zip::ZipArchive::new(std::fs::File::open(&jar_path)?)?;
-
-                {
-                    // version.json
-                    let mut version_zip_entry = jar.by_name("version.json")?;
-                    let mut version_data = String::new();
-                    version_zip_entry.read_to_string(&mut version_data)?;
-
-                    let mojang_version: MojangVersion = serde_json::from_str(&version_data)?;
-
-                    let version_file_json = serde_json::to_string_pretty(&mojang_version)?;
-                    std::fs::write(&version_file_path, version_file_json)?;
-                }
-
-                {
-                    //install_profile.json
-                    let mut profile_zip_entry = jar.by_name("install_profile.json")?;
-                    let mut install_profile_data = String::new();
-                    profile_zip_entry.read_to_string(&mut install_profile_data)?;
-
-                    let forge_profile_json: Result<String> = {
-                        let forge_profile =
-                            serde_json::from_str::<ForgeInstallerProfile>(&install_profile_data);
-                        if let Ok(profile) = forge_profile {
-                            Ok(serde_json::to_string_pretty(&profile)?)
-                        } else {
-                            let forge_profile_v2 = serde_json::from_str::<ForgeInstallerProfileV2>(
-                                &install_profile_data,
-                            );
-                            if let Ok(profile) = forge_profile_v2 {
-                                Ok(serde_json::to_string_pretty(&profile)?)
-                            } else {
-                                Err(forge_profile_v2.unwrap_err().into())
-                            }
-                        }
-                    };
-
-                    if let Ok(forge_profile_json) = forge_profile_json {
-                        std::fs::write(&profile_path, forge_profile_json)?;
-                    } else {
-                        if version.is_supported() {
-                            return Err(forge_profile_json.unwrap_err());
-                        } else {
-                            debug!(
-                                "Forge Version {} is not supported and won't be generated later.",
-                                &version.long_version
-                            )
-                        }
-                    }
-                }
+            if BAD_FORGE_VERSIONS.contains(&version.long_version.as_str()) {
+                debug!("Skipping bad forge version {}", &version.long_version);
+                return None;
             }
 
-            if !installer_info_path.is_file() {
-                let mut installer_info = InstallerInfo::default();
-                installer_info.sha1hash = Some(filehash(&jar_path, HashAlgo::Sha1)?);
-                installer_info.sha256hash = Some(filehash(&jar_path, HashAlgo::Sha256)?);
-                installer_info.size = Some(jar_path.metadata()?.len());
+            Some(version)
+        })
+        .map(|version| {
+            let fm_dir = forge_meta_dir.clone();
+            let li_path = legacy_info_path.clone();
+            tokio::spawn(
+                async move { process_legecy_forge_version(&version, &fm_dir, &li_path).await },
+            )
+        })
+        .buffer_unordered(metadata_cfg.max_parallel_fetch_connections);
+    let results = tasks
+        .map(|t| match t {
+            Ok(Ok(t)) => Ok(t),
+            Ok(Err(e)) => {
+                debug!("Task had an error: {:?}", e);
+                Err(e)
             }
-        } else {
-            // ignore the two versions without install manifests and jar mod class files
+            Err(e) => {
+                debug!("Task had a Join error: {:?}", e);
+                Err(e.into())
+            }
+        })
+        .collect::<Vec<_>>()
+        .await;
 
-            // # TODO: fix those versions?
-            // if version.mc_version_sane == "1.6.1":
-            //     continue
+    let legacy_version_infos = process_results_ok(results);
 
-            // # only gather legacy info if it's missing
-            // if not os.path.isfile(LEGACYINFO_PATH):
-            //     # grab the jar/zip if it's not there
-            //     if not os.path.isfile(jar_path):
-            //         rfile = sess.get(version.url(), stream=True)
-            //         rfile.raise_for_status()
-            //         with open(jar_path, "wb") as f:
-            //             for chunk in rfile.iter_content(chunk_size=128):
-            //                 f.write(chunk)
-            //     # find the latest timestamp in the zip file
-            //     tstamp = datetime.fromtimestamp(0)
-            //     with zipfile.ZipFile(jar_path) as jar:
-            //         for info in jar.infolist():
-            //             tstamp_new = datetime(*info.date_time)
-            //             if tstamp_new > tstamp:
-            //                 tstamp = tstamp_new
-            //     legacy_info = ForgeLegacyInfo()
-            //     legacy_info.release_time = tstamp
-            //     legacy_info.sha1 = filehash(jar_path, hashlib.sha1)
-            //     legacy_info.sha256 = filehash(jar_path, hashlib.sha256)
-            //     legacy_info.size = os.path.getsize(jar_path)
-            //     legacy_info_list.number[key] = legacy_info
+    for version_info in legacy_version_infos {
+        if let Some((long_version, version_info)) = version_info {
+            legacy_info_list.number.insert(long_version, version_info);
         }
     }
 
     // only write legacy info if it's missing
+    if !legacy_info_path.is_file() {
+        let legacy_info_json = serde_json::to_string_pretty(&legacy_info_list)?;
+        std::fs::write(&legacy_info_path, legacy_info_json).with_context(|| {
+            format!(
+                "Failure writing to file {}",
+                &legacy_info_path.to_string_lossy()
+            )
+        })?;
+    }
 
-    // if not os.path.isfile(LEGACYINFO_PATH):
-    //     legacy_info_list.write(LEGACYINFO_PATH)
+    // update our index
+    let last_index = MetaMcIndexEntry {
+        update_time: time::OffsetDateTime::now_utc(),
+        path: derived_index_file.to_str().unwrap().to_string(),
+        hash: derived_index_hash,
+    };
+    let last_index_json = serde_json::to_string_pretty(&last_index)?;
+    std::fs::write(&last_index_path, last_index_json).with_context(|| {
+        format!(
+            "Failure writing to file {}",
+            &last_index_path.to_string_lossy()
+        )
+    })?;
 
     Ok(())
 }
@@ -433,7 +416,7 @@ async fn process_forge_version(
     long_version: &str,
     build: i32,
     version: &str,
-    branch: &str,
+    branch: Option<String>,
 ) -> Result<ForgeEntry> {
     let files = get_single_forge_files_manifest(forge_meta_dir, long_version).await?;
 
@@ -444,7 +427,7 @@ async fn process_forge_version(
         mc_version: mc_version.to_string(),
         version: version.to_string(),
         build: build,
-        branch: Some(branch.to_string()),
+        branch: branch,
         latest: None, // NOTE: we add this later after the fact. The forge promotions file lies about these.
         recommended: Some(is_recommended),
         files: Some(files),
@@ -456,7 +439,7 @@ async fn process_forge_version(
 async fn get_single_forge_files_manifest(
     forge_meta_dir: &PathBuf,
     long_version: &str,
-) -> Result<HashMap<String, ForgeFile>> {
+) -> Result<BTreeMap<String, ForgeFile>> {
     info!("Getting Forge manifest for {long_version}");
 
     let forge_file_manifest_path = forge_meta_dir.join("files_manifests");
@@ -473,7 +456,7 @@ async fn get_single_forge_files_manifest(
 
     let mut from_file = false;
 
-    let files_metadata = if files_manifest_file.exists() {
+    let files_metadata = if files_manifest_file.is_file() {
         from_file = true;
         serde_json::from_str::<ForgeVersionMeta>(&std::fs::read_to_string(&files_manifest_file)?)?
     } else {
@@ -481,10 +464,12 @@ async fn get_single_forge_files_manifest(
             "https://files.minecraftforge.net/net/minecraftforge/forge/{}/meta.json",
             &long_version
         );
-        download::forge::load_single_forge_files_manifest(&file_url).await?
+        download::forge::load_single_forge_files_manifest(&file_url)
+            .await
+            .with_context(|| format!("Failure downloading {}", &file_url))?
     };
 
-    let mut ret_map: HashMap<String, ForgeFile> = HashMap::new();
+    let mut ret_map: BTreeMap<String, ForgeFile> = BTreeMap::new();
 
     for (classifier, extension_obj) in &files_metadata.classifiers {
         let mut count = 0;
@@ -532,8 +517,247 @@ async fn get_single_forge_files_manifest(
 
     if !from_file {
         let files_metadata_json = serde_json::to_string_pretty(&files_metadata)?;
-        std::fs::write(&files_manifest_file, files_metadata_json)?;
+        std::fs::write(&files_manifest_file, files_metadata_json).with_context(|| {
+            format!(
+                "Failure writing to file {}",
+                &files_manifest_file.to_string_lossy()
+            )
+        })?;
     }
 
     Ok(ret_map)
+}
+
+async fn process_legecy_forge_version(
+    version: &ForgeProcessedVersion,
+    forge_meta_dir: &PathBuf,
+    legacy_info_path: &PathBuf,
+) -> Result<Option<(String, ForgeLegacyInfo)>> {
+    let jar_path = forge_meta_dir
+        .join("jars")
+        .join(&version.filename().expect("Missing forge filename"));
+
+    let version_json_name = format!("{}.json", &version.long_version);
+
+    let installer_manifests_dir = forge_meta_dir.join("installer_manifests");
+    if !installer_manifests_dir.exists() {
+        std::fs::create_dir_all(&installer_manifests_dir)
+            .with_context(|| "Failed to create forge `installer_manifests` directory")?;
+    }
+
+    let version_manifests_dir = forge_meta_dir.join("version_manifests");
+    if !version_manifests_dir.exists() {
+        std::fs::create_dir_all(&version_manifests_dir)
+            .with_context(|| "Failed to create forge `version_manifests` directory")?;
+    }
+
+    let installer_info_dir = forge_meta_dir.join("installer_info");
+    if !installer_info_dir.exists() {
+        std::fs::create_dir_all(&installer_info_dir)
+            .with_context(|| "Failed to create forge `installer_info` directory")?;
+    }
+
+    if version.uses_installer() {
+        let installer_info_path = installer_info_dir.join(&version_json_name);
+        let profile_path = installer_manifests_dir.join(&version_json_name);
+        let version_file_path = version_manifests_dir.join(&version_json_name);
+
+        let installer_refresh_required = !profile_path.is_file() || !installer_info_path.is_file();
+
+        if installer_refresh_required {
+            // grab the installer if it's not there
+            if !jar_path.is_file() {
+                debug!("Downloading forge jar from {}", &version.url().unwrap());
+                download::download_binary_file(&jar_path, &version.url().unwrap())
+                    .await
+                    .with_context(|| format!("Failure downloading {}", &version.url().unwrap()))?
+            }
+        }
+
+        debug!("Processing forge jar from {}", &version.url().unwrap());
+        if !profile_path.is_file() {
+            use std::io::Read;
+
+            let mut jar = zip::ZipArchive::new(
+                std::fs::File::open(&jar_path)
+                    .with_context(|| format!("Failure opening {}", &jar_path.to_string_lossy()))?,
+            )
+            .with_context(|| {
+                format!(
+                    "Failure reading Jar archive {}",
+                    &jar_path.to_string_lossy()
+                )
+            })?;
+
+            {
+                // version.json
+                if let Ok(mut version_zip_entry) = jar.by_name("version.json") {
+                    let mut version_data = String::new();
+                    version_zip_entry
+                        .read_to_string(&mut version_data)
+                        .with_context(|| {
+                            format!(
+                                "Failure reading 'version.json' from {}",
+                                &jar_path.to_string_lossy()
+                            )
+                        })?;
+
+                    let mojang_version: MojangVersion = serde_json::from_str(&version_data)
+                        .with_context(|| {
+                            format!(
+                                "Failure reading json from 'version.json' in {}",
+                                &jar_path.to_string_lossy()
+                            )
+                        })?;
+
+                    let version_file_json = serde_json::to_string_pretty(&mojang_version)?;
+                    std::fs::write(&version_file_path, version_file_json).with_context(|| {
+                        format!(
+                            "Failure writing to file {}",
+                            &version_file_path.to_string_lossy()
+                        )
+                    })?;
+                }
+            }
+
+            {
+                //install_profile.json
+                let mut profile_zip_entry =
+                    jar.by_name("install_profile.json").with_context(|| {
+                        format!(
+                            "{} is missing install_profile.json",
+                            &jar_path.to_string_lossy()
+                        )
+                    })?;
+                let mut install_profile_data = String::new();
+                profile_zip_entry
+                    .read_to_string(&mut install_profile_data)
+                    .with_context(|| {
+                        format!(
+                            "Failure reading 'install_profile.json' from {}",
+                            &jar_path.to_string_lossy()
+                        )
+                    })?;
+
+                let forge_profile_json: Result<String> = {
+                    let forge_profile =
+                        serde_json::from_str::<ForgeInstallerProfile>(&install_profile_data);
+                    if let Ok(profile) = forge_profile {
+                        Ok(serde_json::to_string_pretty(&profile)?)
+                    } else {
+                        let forge_profile_v2 =
+                            serde_json::from_str::<ForgeInstallerProfileV2>(&install_profile_data);
+                        if let Ok(profile) = forge_profile_v2 {
+                            Ok(serde_json::to_string_pretty(&profile)?)
+                        } else {
+                            Err(forge_profile_v2.unwrap_err().into())
+                        }
+                    }
+                };
+
+                if let Ok(forge_profile_json) = forge_profile_json {
+                    std::fs::write(&profile_path, forge_profile_json).with_context(|| {
+                        format!(
+                            "Failure writing to file {}",
+                            &profile_path.to_string_lossy()
+                        )
+                    })?;
+                } else {
+                    if version.is_supported() {
+                        return Err(forge_profile_json.unwrap_err()).with_context(|| {
+                            format!(
+                                "Failure reading json from 'install_profile.json' in {}",
+                                &jar_path.to_string_lossy()
+                            )
+                        });
+                    } else {
+                        debug!(
+                            "Forge Version {} is not supported and won't be generated later.",
+                            &version.long_version
+                        )
+                    }
+                }
+            }
+        }
+
+        if !installer_info_path.is_file() {
+            let mut installer_info = InstallerInfo::default();
+            installer_info.sha1hash = Some(filehash(&jar_path, HashAlgo::Sha1)?);
+            installer_info.sha256hash = Some(filehash(&jar_path, HashAlgo::Sha256)?);
+            installer_info.size = Some(jar_path.metadata()?.len());
+
+            let installer_info_json = serde_json::to_string_pretty(&installer_info)?;
+            std::fs::write(&installer_info_path, installer_info_json).with_context(|| {
+                format!(
+                    "Failure writing to file {}",
+                    &installer_info_path.to_string_lossy()
+                )
+            })?;
+        }
+        return Ok(None);
+    } else {
+        // ignore the two versions without install manifests and jar mod class files
+        // TODO: fix those versions?
+
+        if version.mc_version_sane == "1.6.1" {
+            return Ok(None);
+        }
+
+        // only gather legacy info if it's missing
+        if !legacy_info_path.is_file() {
+            if !jar_path.is_file() {
+                debug!("Downloading forge jar from {}", &version.url().unwrap());
+                download::download_binary_file(&jar_path, &version.url().unwrap())
+                    .await
+                    .with_context(|| format!("Failure downloading {}", &version.url().unwrap()))?
+            }
+
+            // find the latest timestamp in the zip file
+            let mut time_stamp = time::OffsetDateTime::UNIX_EPOCH;
+
+            {
+                // context drop to close file
+                let mut jar =
+                    zip::ZipArchive::new(std::fs::File::open(&jar_path).with_context(|| {
+                        format!("Failure opening {}", &jar_path.to_string_lossy())
+                    })?)
+                    .with_context(|| {
+                        format!(
+                            "Failure reading Jar archive {}",
+                            &jar_path.to_string_lossy()
+                        )
+                    })?;
+
+                for i in 0..jar.len() {
+                    let file = jar.by_index(i).with_context(|| {
+                        format!(
+                            "Failure reading Jar archive {} `index:{}`",
+                            &jar_path.to_string_lossy(),
+                            i
+                        )
+                    })?;
+                    let time_stamp_new = file.last_modified().to_time().with_context(|| {
+                        format!(
+                            "Failure reading Jar archive {} `index:{}` last modified time",
+                            &jar_path.to_string_lossy(),
+                            i
+                        )
+                    })?;
+                    if time_stamp_new > time_stamp {
+                        time_stamp = time_stamp_new;
+                    }
+                }
+            }
+
+            let mut legacy_info = ForgeLegacyInfo::default();
+            legacy_info.release_time = Some(time_stamp);
+            legacy_info.sha1 = Some(filehash(&jar_path, HashAlgo::Sha1)?);
+            legacy_info.sha256 = Some(filehash(&jar_path, HashAlgo::Sha256)?);
+            legacy_info.size = Some(jar_path.metadata()?.len());
+
+            return Ok(Some((version.long_version.clone(), legacy_info)));
+            // legacy_info_list.number.insert(key, legacy_info);
+        }
+        return Ok(None);
+    }
 }

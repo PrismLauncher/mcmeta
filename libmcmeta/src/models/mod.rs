@@ -465,7 +465,8 @@ pub struct MetaVersion {
     #[merge(strategy = merge::option::overwrite_some)]
     pub minecraft_arguments: Option<String>,
     #[merge(strategy = merge::option::overwrite_some)]
-    pub release_time: Option<String>,
+    #[serde(with = "time::serde::iso8601::option")]
+    pub release_time: Option<time::OffsetDateTime>,
     #[merge(strategy = merge::option_vec::append_some)]
     pub compatible_java_majors: Option<Vec<i32>>,
     #[merge(strategy = merge::option_vec::append_some)]
@@ -476,6 +477,14 @@ pub struct MetaVersion {
     #[serde(rename = "+jvmArgs")]
     #[merge(strategy = merge::option_vec::append_some)]
     pub additional_jvm_args: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct MetaMcIndexEntry {
+    #[serde(with = "time::serde::iso8601")]
+    pub update_time: time::OffsetDateTime,
+    pub path: String,
+    pub hash: String,
 }
 
 pub mod validation {
@@ -549,8 +558,36 @@ pub mod merge {
         }
 
         pub fn overwrite_key<K: Eq + Hash, V>(left: &mut HashMap<K, V>, right: HashMap<K, V>) {
-            use std::collections::hash_map::Entry;
+            for (k, v) in right {
+                left.insert(k, v);
+            }
+        }
+    }
 
+    pub mod btreemap {
+        use std::collections::BTreeMap;
+        use std::hash::Hash;
+
+        pub fn recurse<K: Eq + Hash + Ord + PartialOrd, V: merge::Merge>(
+            left: &mut BTreeMap<K, V>,
+            right: BTreeMap<K, V>,
+        ) {
+            use std::collections::btree_map::Entry;
+
+            for (k, v) in right {
+                match left.entry(k) {
+                    Entry::Occupied(mut existing) => existing.get_mut().merge(v),
+                    Entry::Vacant(empty) => {
+                        empty.insert(v);
+                    }
+                }
+            }
+        }
+
+        pub fn overwrite_key<K: Eq + Hash + Ord + PartialOrd, V>(
+            left: &mut BTreeMap<K, V>,
+            right: BTreeMap<K, V>,
+        ) {
             for (k, v) in right {
                 left.insert(k, v);
             }
@@ -580,10 +617,41 @@ pub mod merge {
             left: &mut Option<HashMap<K, V>>,
             right: Option<HashMap<K, V>>,
         ) {
-            use std::collections::hash_map::Entry;
             if let Some(new) = right {
                 if let Some(original) = left {
                     hashmap::overwrite_key(original, new);
+                } else {
+                    *left = Some(new);
+                }
+            }
+        }
+    }
+
+    pub mod option_btreemap {
+        use super::btreemap;
+        use std::collections::BTreeMap;
+        use std::hash::Hash;
+
+        pub fn recurse_some<K: Eq + Hash + Ord + PartialOrd, V: merge::Merge>(
+            left: &mut Option<BTreeMap<K, V>>,
+            right: Option<BTreeMap<K, V>>,
+        ) {
+            if let Some(new) = right {
+                if let Some(original) = left {
+                    btreemap::recurse(original, new);
+                } else {
+                    *left = Some(new);
+                }
+            }
+        }
+
+        pub fn overwrite_key_some<K: Eq + Hash + Ord + PartialOrd, V>(
+            left: &mut Option<BTreeMap<K, V>>,
+            right: Option<BTreeMap<K, V>>,
+        ) {
+            if let Some(new) = right {
+                if let Some(original) = left {
+                    btreemap::overwrite_key(original, new);
                 } else {
                     *left = Some(new);
                 }

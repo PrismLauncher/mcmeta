@@ -353,7 +353,8 @@ pub struct OldSnapshotIndex {
 pub struct LegacyOverrideEntry {
     main_class: Option<String>,
     applet_class: Option<String>,
-    release_time: Option<String>,
+    #[serde(with = "time::serde::iso8601::option")]
+    pub release_time: Option<time::OffsetDateTime>,
     #[serde(rename = "+traits")]
     additional_traits: Option<Vec<String>>,
     #[serde(rename = "+jvmArgs")]
@@ -361,30 +362,46 @@ pub struct LegacyOverrideEntry {
 }
 
 impl LegacyOverrideEntry {
-    pub fn apply_onto_meta_version(self, meta_version: &MetaVersion, legacy: bool) {
+    pub fn apply_onto_meta_version(self, meta_version: &mut MetaVersion, legacy: bool) {
         // simply hard override classes
-        // meta_version.main_class = self.main_class
-        // meta_version.applet_class = self.applet_class
-        // # if we have an updated release time (more correct than Mojang), use it
-        // if self.release_time:
-        //     meta_version.release_time = self.release_time
 
-        // # add traits, if any
-        // if self.additional_traits:
-        //     if not meta_version.additional_traits:
-        //         meta_version.additional_traits = []
-        //     meta_version.additional_traits += self.additional_traits
+        meta_version.main_class = self.main_class.clone();
+        meta_version.applet_class = self.applet_class.clone();
 
-        // if self.additional_jvm_args:
-        //     if not meta_version.additional_jvm_args:
-        //         meta_version.additional_jvm_args = []
-        //     meta_version.additional_jvm_args += self.additional_jvm_args
+        // if we have an updated release time (more correct than Mojang), use it
+        if let Some(release_time) = &self.release_time {
+            meta_version.release_time = Some(*release_time);
+        }
 
-        // if legacy:
-        //     # remove all libraries - they are not needed for legacy
-        //     meta_version.libraries = None
-        //     # remove minecraft arguments - we use our own hardcoded ones
-        //     meta_version.minecraft_arguments = None
+        // add traits, if any
+        if let Some(mut additional_traits) = self.additional_traits {
+            if !meta_version.additional_traits.is_some() {
+                meta_version.additional_traits = Some(vec![]);
+            }
+            meta_version
+                .additional_traits
+                .as_mut()
+                .unwrap()
+                .append(&mut additional_traits);
+        }
+
+        if let Some(mut additional_jvm_args) = self.additional_jvm_args {
+            if !meta_version.additional_jvm_args.is_some() {
+                meta_version.additional_jvm_args = Some(vec![]);
+            }
+            meta_version
+                .additional_jvm_args
+                .as_mut()
+                .unwrap()
+                .append(&mut additional_jvm_args);
+        }
+
+        if legacy {
+            // remove all libraries - they are not needed for legacy
+            meta_version.libraries = None;
+            // remove minecraft arguments - we use our own hardcoded ones
+            meta_version.minecraft_arguments = None;
+        }
     }
 }
 
@@ -394,14 +411,15 @@ pub struct LegacyOverrideIndex {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LibraryPatch {
     #[serde(rename = "match")]
     pub patch_match: Vec<GradleSpecifier>,
     #[serde(rename = "override")]
     pub patch_override: Option<Library>,
-    pub additionalLibraries: Option<Vec<Library>>,
+    pub additional_libraries: Option<Vec<Library>>,
     #[serde(default = "default_library_patch_patch_additional_libraries")]
-    pub patchAdditionalLibraries: bool,
+    pub patch_additional_libraries: bool,
 }
 
 fn default_library_patch_patch_additional_libraries() -> bool {
@@ -435,6 +453,7 @@ impl Deref for LibraryPatches {
 pub struct MojangArgumentObject {}
 
 #[derive(Deserialize, Serialize, Debug, Clone, Validate)]
+#[serde(untagged)]
 pub enum MojangArgument {
     String(String),
     Object(MojangArgumentObject),
@@ -477,6 +496,8 @@ fn mojang_logging_validate_type(
 #[derive(Deserialize, Serialize, Debug, Clone, Validate)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangVersion {
+    #[serde(rename = "_comment_")]
+    pub comment: Option<Vec<String>>,
     pub id: String, // TODO: optional?
     pub arguments: Option<MojangArguments>,
     pub asset_index: Option<MojangAssets>,
@@ -489,8 +510,10 @@ pub struct MojangVersion {
     pub minecraft_arguments: Option<String>,
     #[validate(custom(mojang_version_validate_minimum_launcher_version))]
     pub minimum_launcher_version: Option<i32>,
-    pub release_time: Option<String>,
-    pub time: Option<String>,
+    #[serde(with = "time::serde::iso8601::option")]
+    pub release_time: Option<time::OffsetDateTime>,
+    #[serde(with = "time::serde::iso8601::option")]
+    pub time: Option<time::OffsetDateTime>,
     #[serde(rename = "type")]
     pub version_type: Option<String>,
     pub inherits_from: Option<String>,
@@ -533,7 +556,7 @@ impl MojangVersion {
         let mut main_jar = None;
         let mut addn_traits = None;
         let mut new_type = self.version_type.clone();
-        let mut compatible_java_majors = None;
+        let mut compatible_java_majors;
         if !self.id.is_empty() {
             let downloads = self.downloads.clone().expect("Missing downloads");
             let client_download = downloads
