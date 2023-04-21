@@ -6,13 +6,11 @@ use axum::{routing::get, Extension, Router};
 use tracing::{debug, info};
 
 use anyhow::Result;
-use argparse::{ArgumentParser, Store, StoreTrue};
 use dotenv::dotenv;
 use tracing_subscriber::{filter, prelude::*};
 
 mod app_config;
 mod download;
-mod errors;
 mod routes;
 mod storage;
 mod utils;
@@ -20,29 +18,29 @@ mod utils;
 #[macro_use]
 extern crate lazy_static;
 
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct CliArgs {
+    #[arg(short, long, value_name = "FILE")]
+    config: Option<String>,
+    #[arg(long)]
+    use_dotenv: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut config_path = "".to_string();
-    let mut use_dotenv = false;
-    {
-        // limit scope of argparse borrows
-        let mut ap = ArgumentParser::new();
-        ap.set_description("A Minecraft metadata api server for Mojang and Modloader metadata.");
-        ap.refer(&mut config_path).add_option(
-            &["-c", "--config"],
-            Store,
-            "Path to a json config file.",
-        );
-        ap.refer(&mut use_dotenv).add_option(
-            &["--use-dotenv"],
-            StoreTrue,
-            "Load environment variables from a local .env",
-        );
-        ap.parse_args_or_exit();
+    let mut config_path = String::new();
+
+    let args = CliArgs::parse();
+
+    if args.use_dotenv {
+        dotenv().ok();
     }
 
-    if use_dotenv {
-        dotenv().ok();
+    if let Some(path) = args.config {
+        config_path = path;
     }
 
     let config = Arc::new(ServerConfig::from_config(&config_path)?);

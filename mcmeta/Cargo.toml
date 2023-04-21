@@ -2,16 +2,15 @@
 name = "mcmeta"
 version = "0.1.0"
 edition = "2021"
+description = "A Metadata server for Minecraft launchers and others"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = { version = "1.0.70", features = ["backtrace"] }
-argparse = "0.2.2"
 axum = "0.6.15"
-clap = "4.2.1"
+clap = { version = "4.2.1", features = ["derive"] }
 config = "0.13.3"
-data-encoding = "2.3.3"
 dotenv = "0.15.0"
 futures = "0.3.28"
 git2 = "0.17.0"

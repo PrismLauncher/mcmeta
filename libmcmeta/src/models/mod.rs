@@ -3,12 +3,15 @@ use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use std::collections::HashMap;
 use std::{fmt::Display, str::FromStr};
+use thiserror::Error;
 
 pub mod forge;
 pub mod mojang;
 
-custom_error! { pub ModelError
-    InvalidGradleSpecifier { specifier: String } = "Invalid Gradle specifier '{specifier}'",
+#[derive(Error, Debug)]
+pub enum ModelError {
+    #[error("Invalid Gradle specifier '{specifier}'")]
+    InvalidGradleSpecifier { specifier: String },
 }
 
 static META_FORMAT_VERSION: i32 = 1;
