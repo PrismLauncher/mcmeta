@@ -110,5 +110,5 @@ pub async fn load_zipped_version(version_url: &str) -> Result<MinecraftVersion> 
         }
     }
 
-    Ok(manifest.ok_or(anyhow!("Unable to find version manifest"))?)
+    manifest.ok_or(anyhow!("Unable to find version manifest"))
 }

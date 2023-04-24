@@ -10,7 +10,7 @@ pub async fn download_binary_file(path: &PathBuf, url: &str) -> Result<()> {
 
     if let Some(parent_dir) = path.parent() {
         if !parent_dir.exists() {
-            std::fs::create_dir_all(&parent_dir)?;
+            std::fs::create_dir_all(parent_dir)?;
         }
     }
 

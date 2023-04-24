@@ -375,7 +375,7 @@ impl LegacyOverrideEntry {
 
         // add traits, if any
         if let Some(mut additional_traits) = self.additional_traits {
-            if !meta_version.additional_traits.is_some() {
+            if meta_version.additional_traits.is_none() {
                 meta_version.additional_traits = Some(vec![]);
             }
             meta_version
@@ -386,7 +386,7 @@ impl LegacyOverrideEntry {
         }
 
         if let Some(mut additional_jvm_args) = self.additional_jvm_args {
-            if !meta_version.additional_jvm_args.is_some() {
+            if meta_version.additional_jvm_args.is_none() {
                 meta_version.additional_jvm_args = Some(vec![]);
             }
             meta_version
@@ -622,11 +622,10 @@ impl MojangVersion {
             }
         }
 
-        let new_libs = if let Some(libraries) = &self.libraries {
-            Some(libraries.iter().map(|lib| lib.into()).collect())
-        } else {
-            None
-        };
+        let new_libs = self
+            .libraries
+            .as_ref()
+            .map(|libraries| libraries.iter().map(|lib| lib.into()).collect());
 
         MetaVersion {
             format_version: META_FORMAT_VERSION,
@@ -637,11 +636,11 @@ impl MojangVersion {
             libraries: new_libs,
             main_class: self.main_class.clone(),
             minecraft_arguments: self.minecraft_arguments.clone(),
-            release_time: self.release_time.clone(),
+            release_time: self.release_time,
             version_type: new_type,
-            compatible_java_majors: compatible_java_majors,
+            compatible_java_majors,
             additional_traits: addn_traits,
-            main_jar: main_jar,
+            main_jar,
             order: None,
             volatile: None,
             requires: None,

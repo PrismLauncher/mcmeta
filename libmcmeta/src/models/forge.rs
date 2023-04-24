@@ -59,7 +59,7 @@ pub struct ForgeVersionClassifierIter<'a> {
 impl ForgeVersionClassifier {
     pub fn iter(&self) -> ForgeVersionClassifierIter<'_> {
         ForgeVersionClassifierIter {
-            classifier: &self,
+            classifier: self,
             index: 0,
         }
     }
@@ -90,7 +90,7 @@ impl<'a> IntoIterator for &'a ForgeVersionClassifier {
 
     fn into_iter(self) -> Self::IntoIter {
         ForgeVersionClassifierIter {
-            classifier: &self,
+            classifier: self,
             index: 0,
         }
     }
@@ -160,7 +160,7 @@ pub struct ForgeVersionClassifiersIter<'a> {
 impl ForgeVersionClassifiers {
     pub fn iter(&self) -> ForgeVersionClassifiersIter<'_> {
         ForgeVersionClassifiersIter {
-            classifiers: &self,
+            classifiers: self,
             index: 0,
         }
     }
@@ -175,7 +175,7 @@ impl<'a> IntoIterator for &'a ForgeVersionClassifiers {
 
     fn into_iter(self) -> Self::IntoIter {
         ForgeVersionClassifiersIter {
-            classifiers: &self,
+            classifiers: self,
             index: 0,
         }
     }
@@ -871,8 +871,8 @@ impl ForgeProcessedVersion {
             return false;
         }
 
-        let mut version_parts = self.raw_version.split(".");
-        let num_version_parts = self.raw_version.split(".").count();
+        let mut version_parts = self.raw_version.split('.');
+        let num_version_parts = self.raw_version.split('.').count();
         if num_version_parts < 1 {
             return false;
         }

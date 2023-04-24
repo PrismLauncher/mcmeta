@@ -15,7 +15,7 @@ pub async fn raw_mojang_manifest(config: Extension<Arc<ServerConfig>>) -> impl I
             let mojang_meta_dir = metadata_dir.join("mojang");
             let local_manifest = mojang_meta_dir.join("version_manifest_v2.json");
             let manifest = serde_json::from_str::<MojangVersionManifest>(
-                &std::fs::read_to_string(&local_manifest).unwrap(),
+                &std::fs::read_to_string(local_manifest).unwrap(),
             )
             .unwrap();
 

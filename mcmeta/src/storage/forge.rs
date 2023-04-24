@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use futures::{stream, StreamExt};
 use std::collections::{BTreeMap, HashSet};
-use std::path::PathBuf;
+use std::path::Path;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -107,19 +107,19 @@ async fn update_forge_metadata_json(
     debug!("Processing Forge Promotions");
 
     for (promo_key, shortversion) in &promotions_metadata.promos {
-        match promoted_key_expression.captures(&promo_key) {
+        match promoted_key_expression.captures(promo_key) {
             None => {
                 warn!("Skipping promotion {}, the key did not parse:", promo_key);
             }
             Some(captures) => {
-                if let None = captures.name("mc") {
+                if captures.name("mc").is_none() {
                     debug!(
                         "Skipping promotion {}, because it has no Minecraft version.",
                         promo_key
                     );
                     continue;
                 }
-                if let Some(_) = captures.name("branch") {
+                if captures.name("branch").is_some() {
                     debug!(
                         "Skipping promotion {}, because it on a branch only.",
                         promo_key
@@ -143,8 +143,7 @@ async fn update_forge_metadata_json(
     let forge_version_pairs = maven_metadata
         .versions
         .iter()
-        .map(|(k, v)| v.iter().map(|lv| (k.clone(), lv.clone())))
-        .flatten()
+        .flat_map(|(k, v)| v.iter().map(|lv| (k.clone(), lv.clone())))
         .collect::<Vec<_>>();
     let tasks = stream::iter(forge_version_pairs)
         .map(|(mc_version, long_version)| {
@@ -161,7 +160,7 @@ async fn update_forge_metadata_json(
                     )),
 
                     Some(captures) => {
-                        if let None = captures.name("mc") {
+                        if captures.name("mc").is_none() {
                             Err(anyhow!(
                                 "Forge long version {} not for a minecraft version?",
                                 long_version
@@ -214,10 +213,7 @@ async fn update_forge_metadata_json(
         new_index
             .by_mc_version
             .get_mut(&mc_version)
-            .expect(&format!(
-                "Missing forge info for minecraft version {}",
-                &mc_version
-            ))
+            .unwrap_or_else(|| panic!("Missing forge info for minecraft version {}", &mc_version))
             .versions
             .push(long_version.clone());
         // NOTE: we add this later after the fact. The forge promotions file lies about these.
@@ -228,10 +224,9 @@ async fn update_forge_metadata_json(
             new_index
                 .by_mc_version
                 .get_mut(&mc_version)
-                .expect(&format!(
-                    "Missing forge info for minecraft version {}",
-                    &mc_version
-                ))
+                .unwrap_or_else(|| {
+                    panic!("Missing forge info for minecraft version {}", &mc_version)
+                })
                 .recommended = Some(long_version.clone());
         }
     }
@@ -239,10 +234,10 @@ async fn update_forge_metadata_json(
     debug!("Post-processing forge promotions and adding missing 'latest'");
 
     for (mc_version, info) in &mut new_index.by_mc_version {
-        let latest_version = info.versions.last().expect(&format!(
-            "No forge versions for minecraft version {}",
-            mc_version
-        ));
+        let latest_version = info
+            .versions
+            .last()
+            .unwrap_or_else(|| panic!("No forge versions for minecraft version {}", mc_version));
         info.latest = Some(latest_version.to_string());
         info!("Added {} as latest for {}", latest_version, mc_version)
     }
@@ -353,9 +348,9 @@ async fn update_forge_legacy_metadata_json(
         .map(|version| {
             let fm_dir = forge_meta_dir.clone();
             let li_path = legacy_info_path.clone();
-            tokio::spawn(
-                async move { process_legecy_forge_version(&version, &fm_dir, &li_path).await },
-            )
+            tokio::spawn(async move {
+                process_legecy_forge_version(&version, fm_dir.as_path(), li_path.as_path()).await
+            })
         })
         .buffer_unordered(metadata_cfg.max_parallel_fetch_connections);
     let results = tasks
@@ -375,10 +370,8 @@ async fn update_forge_legacy_metadata_json(
 
     let legacy_version_infos = process_results_ok(results);
 
-    for version_info in legacy_version_infos {
-        if let Some((long_version, version_info)) = version_info {
-            legacy_info_list.number.insert(long_version, version_info);
-        }
+    for (long_version, version_info) in legacy_version_infos.into_iter().flatten() {
+        legacy_info_list.number.insert(long_version, version_info);
     }
 
     // only write legacy info if it's missing
@@ -410,7 +403,7 @@ async fn update_forge_legacy_metadata_json(
 }
 
 async fn process_forge_version(
-    forge_meta_dir: &PathBuf,
+    forge_meta_dir: &Path,
     recommended_set: &HashSet<String>,
     mc_version: &str,
     long_version: &str,
@@ -426,8 +419,8 @@ async fn process_forge_version(
         long_version: long_version.to_string(),
         mc_version: mc_version.to_string(),
         version: version.to_string(),
-        build: build,
-        branch: branch,
+        build,
+        branch,
         latest: None, // NOTE: we add this later after the fact. The forge promotions file lies about these.
         recommended: Some(is_recommended),
         files: Some(files),
@@ -437,7 +430,7 @@ async fn process_forge_version(
 }
 
 async fn get_single_forge_files_manifest(
-    forge_meta_dir: &PathBuf,
+    forge_meta_dir: &Path,
     long_version: &str,
 ) -> Result<BTreeMap<String, ForgeFile>> {
     info!("Getting Forge manifest for {long_version}");
@@ -530,8 +523,8 @@ async fn get_single_forge_files_manifest(
 
 async fn process_legecy_forge_version(
     version: &ForgeProcessedVersion,
-    forge_meta_dir: &PathBuf,
-    legacy_info_path: &PathBuf,
+    forge_meta_dir: &Path,
+    legacy_info_path: &Path,
 ) -> Result<Option<(String, ForgeLegacyInfo)>> {
     let jar_path = forge_meta_dir
         .join("jars")
@@ -662,29 +655,28 @@ async fn process_legecy_forge_version(
                             &profile_path.to_string_lossy()
                         )
                     })?;
-                } else {
-                    if version.is_supported() {
-                        return Err(forge_profile_json.unwrap_err()).with_context(|| {
-                            format!(
-                                "Failure reading json from 'install_profile.json' in {}",
-                                &jar_path.to_string_lossy()
-                            )
-                        });
-                    } else {
-                        debug!(
-                            "Forge Version {} is not supported and won't be generated later.",
-                            &version.long_version
+                } else if version.is_supported() {
+                    return Err(forge_profile_json.unwrap_err()).with_context(|| {
+                        format!(
+                            "Failure reading json from 'install_profile.json' in {}",
+                            &jar_path.to_string_lossy()
                         )
-                    }
+                    });
+                } else {
+                    debug!(
+                        "Forge Version {} is not supported and won't be generated later.",
+                        &version.long_version
+                    )
                 }
             }
         }
 
         if !installer_info_path.is_file() {
-            let mut installer_info = InstallerInfo::default();
-            installer_info.sha1hash = Some(filehash(&jar_path, HashAlgo::Sha1)?);
-            installer_info.sha256hash = Some(filehash(&jar_path, HashAlgo::Sha256)?);
-            installer_info.size = Some(jar_path.metadata()?.len());
+            let installer_info = InstallerInfo {
+                sha1hash: Some(filehash(&jar_path, HashAlgo::Sha1)?),
+                sha256hash: Some(filehash(&jar_path, HashAlgo::Sha256)?),
+                size: Some(jar_path.metadata()?.len()),
+            };
 
             let installer_info_json = serde_json::to_string_pretty(&installer_info)?;
             std::fs::write(&installer_info_path, installer_info_json).with_context(|| {
@@ -694,7 +686,7 @@ async fn process_legecy_forge_version(
                 )
             })?;
         }
-        return Ok(None);
+        Ok(None)
     } else {
         // ignore the two versions without install manifests and jar mod class files
         // TODO: fix those versions?
@@ -749,15 +741,16 @@ async fn process_legecy_forge_version(
                 }
             }
 
-            let mut legacy_info = ForgeLegacyInfo::default();
-            legacy_info.release_time = Some(time_stamp);
-            legacy_info.sha1 = Some(filehash(&jar_path, HashAlgo::Sha1)?);
-            legacy_info.sha256 = Some(filehash(&jar_path, HashAlgo::Sha256)?);
-            legacy_info.size = Some(jar_path.metadata()?.len());
+            let legacy_info = ForgeLegacyInfo {
+                release_time: Some(time_stamp),
+                sha1: Some(filehash(&jar_path, HashAlgo::Sha1)?),
+                sha256: Some(filehash(&jar_path, HashAlgo::Sha256)?),
+                size: Some(jar_path.metadata()?.len()),
+            };
 
             return Ok(Some((version.long_version.clone(), legacy_info)));
             // legacy_info_list.number.insert(key, legacy_info);
         }
-        return Ok(None);
+        Ok(None)
     }
 }

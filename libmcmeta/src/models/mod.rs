@@ -492,7 +492,7 @@ pub struct MetaMcIndexEntry {
 
 pub mod validation {
     pub fn is_some<T>(obj: Option<T>) -> Result<(), serde_valid::validation::Error> {
-        if !obj.is_some() {
+        if obj.is_none() {
             return Err(serde_valid::validation::Error::Custom(
                 "Must be some".to_string(),
             ));

@@ -21,8 +21,8 @@ impl StorageFormat {
                     std::fs::create_dir_all(metadata_dir)?;
                 }
 
-                mojang::initialize_mojang_metadata(&self, metadata_cfg).await?;
-                forge::initialize_forge_metadata(&self, metadata_cfg).await?;
+                mojang::initialize_mojang_metadata(self, metadata_cfg).await?;
+                forge::initialize_forge_metadata(self, metadata_cfg).await?;
             }
             StorageFormat::Database => todo!(),
         }

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use futures::{stream, StreamExt};
 use libmcmeta::models::mojang::{
@@ -65,7 +65,7 @@ pub async fn initialize_mojang_metadata(
 
 async fn update_mojang_metadata_json(
     metadata_cfg: &MetadataConfig,
-    mojang_meta_dir: &PathBuf,
+    mojang_meta_dir: &Path,
 ) -> Result<()> {
     use std::collections::{HashMap, HashSet};
 
@@ -94,11 +94,7 @@ async fn update_mojang_metadata_json(
         let local_ids =
             HashSet::<String>::from_iter(local_manifest.versions.iter().map(|v| v.id.clone()));
 
-        remote_ids
-            .difference(&local_ids)
-            .into_iter()
-            .cloned()
-            .collect()
+        remote_ids.difference(&local_ids).cloned().collect()
     };
 
     let versions_dir = mojang_meta_dir.join("versions");
@@ -142,7 +138,7 @@ async fn update_mojang_metadata_json(
 
 async fn update_mojang_static_metadata_json(
     metadata_cfg: &MetadataConfig,
-    mojang_meta_dir: &PathBuf,
+    mojang_meta_dir: &Path,
 ) -> Result<()> {
     let static_dir = std::path::Path::new(&metadata_cfg.static_directory);
     let versions_dir = mojang_meta_dir.join("versions");
@@ -163,7 +159,7 @@ async fn update_mojang_static_metadata_json(
 
         let tasks = stream::iter(experiments.experiments)
             .map(|experiment| {
-                let e = experiment.clone();
+                let e = experiment;
                 let dir = versions_dir.clone();
 
                 tokio::spawn(async move {
@@ -200,7 +196,7 @@ async fn update_mojang_static_metadata_json(
 
         let tasks = stream::iter(old_snapshots.old_snapshots)
             .map(|snapshot| {
-                let s = snapshot.clone();
+                let s = snapshot;
                 let dir = versions_dir.clone();
 
                 tokio::spawn(async move {
@@ -231,7 +227,7 @@ async fn update_mojang_static_metadata_json(
 }
 
 pub async fn update_mojang_version_manifest_json(
-    versions_dir: &std::path::PathBuf,
+    versions_dir: &std::path::Path,
     version: &MojangVersionManifestVersion,
 ) -> Result<()> {
     let version_file = versions_dir.join(format!("{}.json", &version.id));
@@ -257,7 +253,7 @@ pub async fn update_mojang_version_manifest_json(
 }
 
 pub async fn update_mojang_experiment_json(
-    versions_dir: &std::path::PathBuf,
+    versions_dir: &std::path::Path,
     version: &ExperimentEntry,
 ) -> Result<()> {
     let version_file = versions_dir.join(format!("{}.json", &version.id));
@@ -283,7 +279,7 @@ pub async fn update_mojang_experiment_json(
 }
 
 pub async fn update_mojang_old_snapshot_json(
-    versions_dir: &std::path::PathBuf,
+    versions_dir: &std::path::Path,
     snapshot: &OldSnapshotEntry,
 ) -> Result<()> {
     let version_file = versions_dir.join(format!("{}.json", &snapshot.id));

@@ -20,7 +20,7 @@ pub async fn raw_forge_maven_meta(config: Extension<Arc<ServerConfig>>) -> impl 
             let forge_meta_dir = metadata_dir.join("forge");
             let maven_meta_file = forge_meta_dir.join("maven-metadata.json");
             let manifest = serde_json::from_str::<ForgeMavenMetadata>(
-                &std::fs::read_to_string(&maven_meta_file).unwrap(),
+                &std::fs::read_to_string(maven_meta_file).unwrap(),
             )
             .unwrap();
 
@@ -46,7 +46,7 @@ pub async fn raw_forge_promotions(config: Extension<Arc<ServerConfig>>) -> impl 
             let forge_meta_dir = metadata_dir.join("forge");
             let promotions_file = forge_meta_dir.join("promotions_slim.json");
             let manifest = serde_json::from_str::<ForgeMavenPromotions>(
-                &std::fs::read_to_string(&promotions_file).unwrap(),
+                &std::fs::read_to_string(promotions_file).unwrap(),
             )
             .unwrap();
 
