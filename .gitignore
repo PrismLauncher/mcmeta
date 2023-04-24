@@ -2,6 +2,12 @@ target/
 Cargo.lock
 
 .env
+/config
+/logs
 
 # downloaded metadata during development
 meta
+
+# dev envierment
+/.helix
+/.vscode

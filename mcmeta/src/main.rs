@@ -1,270 +1,95 @@
-use std::{path::Path as StdPath, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 
-use app_config::{ServerConfig, StorageFormat};
-use axum::{
-    extract::{Path, Query},
-    response::IntoResponse,
-    routing::get,
-    Extension, Router,
-};
-use custom_error::custom_error;
-use libmcmeta::models::{
-    forge::{
-        ForgeInstallerManifestVersion, ForgeMavenMetadata, ForgeMavenPromotions, ForgeVersion,
-        ForgeVersionMeta,
-    },
-    mojang::{MinecraftVersion, MojangVersionManifest},
-};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use app_config::ServerConfig;
+use axum::{routing::get, Extension, Router};
+
 use tracing::{debug, info};
+
+use anyhow::Result;
+use dotenv::dotenv;
+use tracing_subscriber::{filter, prelude::*};
 
 mod app_config;
 mod download;
+mod routes;
 mod storage;
+mod utils;
 
-custom_error! {pub MetaMCError
-    MojangMetadata { source: download::mojang::MojangMetadataError } = "Error while downloading Mojang metadata: {source}",
-    Config { source: config::ConfigError } = "Error while reading config from environment",
-    Parse { source: std::net::AddrParseError } = "Error while parsing address: {source}",
-    Hyper { source: hyper::Error } = "Error while running Hyper: {source}",
-    IO { source: std::io::Error } = "Error while reading or writing: {source}",
-    Json { source: serde_json::Error } = "Error while serializing or deserializing JSON: {source}",
-}
+#[macro_use]
+extern crate lazy_static;
 
-#[derive(Serialize, Debug, Clone)]
-pub struct APIResponse<T> {
-    pub data: Option<T>,
-    pub error: Option<String>,
-}
+use clap::Parser;
 
-async fn raw_mojang_manifest(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
-    match &config.storage_format {
-        app_config::StorageFormat::Json { meta_directory } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let mojang_meta_dir = metadata_dir.join("mojang");
-            let local_manifest = mojang_meta_dir.join("version_manifest_v2.json");
-            let manifest = serde_json::from_str::<MojangVersionManifest>(
-                &std::fs::read_to_string(&local_manifest).unwrap(),
-            )
-            .unwrap();
-
-            axum::Json(APIResponse {
-                data: Some(manifest),
-                error: None,
-            })
-        }
-        app_config::StorageFormat::Database => todo!(),
-    }
-}
-
-async fn raw_mojang_version(
-    config: Extension<Arc<ServerConfig>>,
-    Path(version): Path<String>,
-) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let mojang_meta_dir = metadata_dir.join("mojang");
-            let versions_dir = mojang_meta_dir.join("versions");
-            let version_file = versions_dir.join(format!("{}.json", version));
-            if !version_file.exists() {
-                return (
-                    axum::http::StatusCode::NOT_FOUND,
-                    axum::Json(APIResponse {
-                        data: None,
-                        error: Some(format!("Version {} does not exist", version)),
-                    }),
-                );
-            }
-            let manifest = serde_json::from_str::<MinecraftVersion>(
-                &std::fs::read_to_string(&version_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
-}
-
-async fn raw_forge_maven_meta(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let maven_meta_file = forge_meta_dir.join("maven-metadata.json");
-            let manifest = serde_json::from_str::<ForgeMavenMetadata>(
-                &std::fs::read_to_string(&maven_meta_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
-}
-
-async fn raw_forge_promotions(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let promotions_file = forge_meta_dir.join("promotions_slim.json");
-            let manifest = serde_json::from_str::<ForgeMavenPromotions>(
-                &std::fs::read_to_string(&promotions_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
-}
-
-async fn raw_forge_version(
-    config: Extension<Arc<ServerConfig>>,
-    Path(version): Path<String>,
-) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let versions_dir = forge_meta_dir.join("version_manifests");
-            let version_file = versions_dir.join(format!("{}.json", version));
-            if !version_file.exists() {
-                return (
-                    axum::http::StatusCode::NOT_FOUND,
-                    axum::Json(APIResponse {
-                        data: None,
-                        error: Some(format!("Version {} does not exist", version)),
-                    }),
-                );
-            }
-            let manifest = serde_json::from_str::<ForgeVersion>(
-                &std::fs::read_to_string(&version_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
-}
-
-async fn raw_forge_version_meta(
-    config: Extension<Arc<ServerConfig>>,
-    Path(version): Path<String>,
-) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let versions_dir = forge_meta_dir.join("files_manifests");
-            let version_file = versions_dir.join(format!("{}.json", version));
-            if !version_file.exists() {
-                return (
-                    axum::http::StatusCode::NOT_FOUND,
-                    axum::Json(APIResponse {
-                        data: None,
-                        error: Some(format!("Version {} does not exist", version)),
-                    }),
-                );
-            }
-            let manifest = serde_json::from_str::<ForgeVersionMeta>(
-                &std::fs::read_to_string(&version_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
-}
-
-async fn raw_forge_version_installer(
-    config: Extension<Arc<ServerConfig>>,
-    Path(version): Path<String>,
-) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json { meta_directory } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let versions_dir = forge_meta_dir.join("installer_manifests");
-            let version_file = versions_dir.join(format!("{}.json", version));
-            if !version_file.exists() {
-                return (
-                    axum::http::StatusCode::NOT_FOUND,
-                    axum::Json(APIResponse {
-                        data: None,
-                        error: Some(format!("Version {} does not exist", version)),
-                    }),
-                );
-            }
-            let manifest = serde_json::from_str::<ForgeInstallerManifestVersion>(
-                &std::fs::read_to_string(&version_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct CliArgs {
+    #[arg(short, long, value_name = "FILE")]
+    config: Option<String>,
+    #[arg(long)]
+    use_dotenv: bool,
 }
 
 #[tokio::main]
-async fn main() -> Result<(), MetaMCError> {
-    tracing_subscriber::fmt::init();
-    let config = Arc::new(ServerConfig::from_config()?);
+async fn main() -> Result<()> {
+    let mut config_path = String::new();
+
+    let args = CliArgs::parse();
+
+    if args.use_dotenv {
+        dotenv().ok();
+    }
+
+    if let Some(path) = args.config {
+        config_path = path;
+    }
+
+    let config = Arc::new(ServerConfig::from_config(&config_path)?);
+
+    let file_appender =
+        tracing_appender::rolling::hourly(&config.debug_log.path, &config.debug_log.prefix);
+    let (non_blocking_file, _guard) = tracing_appender::non_blocking(file_appender);
+    let stdout_log = tracing_subscriber::fmt::layer().compact();
+
+    let debug_log = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_level(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_writer(non_blocking_file)
+        .with_filter(filter::LevelFilter::from_level(
+            tracing::Level::from_str(&config.debug_log.level).unwrap_or(tracing::Level::DEBUG),
+        ));
+
+    if config.debug_log.enable {
+        tracing_subscriber::registry()
+            .with(stdout_log.with_filter(filter::EnvFilter::from_default_env()))
+            .with(debug_log)
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(stdout_log.with_filter(filter::EnvFilter::from_default_env()))
+            .init();
+    }
+
     debug!("Config: {:#?}", config);
 
-    config.storage_format.initialize_metadata().await?;
+    config
+        .storage_format
+        .initialize_metadata(&config.metadata)
+        .await?;
 
     let raw_mojang_routes = Router::new()
-        .route("/", get(raw_mojang_manifest))
-        .route("/:version", get(raw_mojang_version));
+        .route("/", get(routes::mojang::raw_mojang_manifest))
+        .route("/:version", get(routes::mojang::raw_mojang_version));
     let raw_forge_routes = Router::new()
-        .route("/", get(raw_forge_maven_meta))
-        .route("/promotions", get(raw_forge_promotions))
-        .route("/:version", get(raw_forge_version))
-        .route("/:version/meta", get(raw_forge_version_meta))
-        .route("/:version/installer", get(raw_forge_version_installer));
+        .route("/", get(routes::forge::raw_forge_maven_meta))
+        .route("/promotions", get(routes::forge::raw_forge_promotions))
+        .route("/:version", get(routes::forge::raw_forge_version))
+        .route("/:version/meta", get(routes::forge::raw_forge_version_meta))
+        .route(
+            "/:version/installer",
+            get(routes::forge::raw_forge_version_installer),
+        );
 
     let raw_routes = Router::new()
         .nest("/mojang", raw_mojang_routes)
