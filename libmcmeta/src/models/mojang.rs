@@ -55,10 +55,12 @@ pub struct MojangVersionManifestVersion {
     pub version_type: String,
     /// The URL to the version's JSON.
     pub url: String,
-    /// The time the version was released.
-    pub time: String,
     /// The time the version was last updated.
-    pub release_time: String,
+    #[serde(with = "time::serde::iso8601")]
+    pub time: time::OffsetDateTime,
+    /// The time the version was released.
+    #[serde(with = "time::serde::iso8601")]
+    pub release_time: time::OffsetDateTime,
     /// Compliance level
     pub compliance_level: i32,
     /// The sha1 hash of the version's JSON.
