@@ -71,7 +71,7 @@ async fn update_mojang_metadata_json(
 
     info!("Acquiring remote Mojang metadata");
     let remote_manifest = download::mojang::load_manifest().await?;
-    let remote_verions: HashMap<String, MojangVersionManifestVersion> = HashMap::from_iter(
+    let remote_versions: HashMap<String, MojangVersionManifestVersion> = HashMap::from_iter(
         remote_manifest
             .versions
             .iter()
@@ -81,20 +81,50 @@ async fn update_mojang_metadata_json(
         HashSet::<String>::from_iter(remote_manifest.versions.iter().map(|v| v.id.clone()));
 
     let local_manifest_path = mojang_meta_dir.join("version_manifest_v2.json");
-    let pending_ids: Vec<String> = if !local_manifest_path.is_file() {
+    let pending_ids: Vec<(String, bool)> = if !local_manifest_path.is_file() {
         info!("Local Mojang metadata does not exist, saving it");
         let manifest_json = serde_json::to_string_pretty(&remote_manifest)?;
         std::fs::write(&local_manifest_path, manifest_json)?;
 
-        remote_ids.into_iter().collect()
+        remote_ids.into_iter().map(|id| (id, true)).collect()
     } else {
         let local_manifest = serde_json::from_str::<MojangVersionManifest>(
             &std::fs::read_to_string(&local_manifest_path)?,
         )?;
+        let local_versions: HashMap<String, MojangVersionManifestVersion> = HashMap::from_iter(
+            local_manifest
+                .versions
+                .iter()
+                .map(|v| (v.id.clone(), v.clone())),
+        );
         let local_ids =
             HashSet::<String>::from_iter(local_manifest.versions.iter().map(|v| v.id.clone()));
 
-        remote_ids.difference(&local_ids).cloned().collect()
+        let mut diff: Vec<(String, bool)> = remote_ids
+            .difference(&local_ids)
+            .cloned()
+            .map(|id| (id, false))
+            .collect();
+        let mut out_of_date: Vec<(String, bool)> = local_ids
+            .iter()
+            .filter_map(|id| {
+                let remote_version = remote_versions
+                    .get(id)
+                    .expect("local version to exist remotely");
+                let local_version = local_versions
+                    .get(id)
+                    .expect("local version to exist localy");
+                if remote_version.time > local_version.time {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .map(|id| (id, true))
+            .collect();
+        diff.append(&mut out_of_date);
+        diff
     };
 
     let versions_dir = mojang_meta_dir.join("versions");
@@ -108,11 +138,11 @@ async fn update_mojang_metadata_json(
     }
 
     let tasks = stream::iter(pending_ids)
-        .map(|version| {
-            let v = remote_verions.get(&version).unwrap().clone();
+        .map(|(version, force_update)| {
+            let v = remote_versions.get(&version).unwrap().clone();
             let dir = versions_dir.clone();
             tokio::spawn(async move {
-                update_mojang_version_manifest_json(&dir, &v)
+                update_mojang_version_manifest_json(&dir, &v, force_update)
                     .await
                     .with_context(|| format!("Failed to initialize Mojang version {}", v.id))
             })
@@ -229,12 +259,13 @@ async fn update_mojang_static_metadata_json(
 pub async fn update_mojang_version_manifest_json(
     versions_dir: &std::path::Path,
     version: &MojangVersionManifestVersion,
+    force_update: bool,
 ) -> Result<()> {
     let version_file = versions_dir.join(format!("{}.json", &version.id));
-    if !version_file.is_file() {
+    if !version_file.is_file() || force_update {
         info!(
-            "Mojang metadata for version {} does not exist, downloading it",
-            &version.id
+            "Updating Mojang metadata for version {} to timestamp {}",
+            &version.id, &version.time
         );
         let version_manifest = download::mojang::load_version_manifest(&version.url)
             .await
