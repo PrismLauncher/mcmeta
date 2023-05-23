@@ -71,7 +71,7 @@ impl ForgeDataStorage {
         }
     }
 
-    pub fn load_maven_metadate(&self) -> Result<Option<ForgeMavenMetadata>> {
+    pub fn load_maven_metadata(&self) -> Result<Option<ForgeMavenMetadata>> {
         match *self.storage_format {
             StorageFormat::Json {
                 meta_directory: _,
@@ -606,8 +606,6 @@ impl UpstreamMetadataUpdater {
 
         let mut recommended_set = HashSet::new();
 
-        let mut new_index = DerivedForgeIndex::default();
-
         // FIXME: does not fully validate that the file has not changed format
         // NOTE: For some insane reason, the format of the versions here is special. It having a branch at the end means it
         //           affects that particular branch.
@@ -650,12 +648,76 @@ impl UpstreamMetadataUpdater {
         }
 
         debug!("Processing Forge Versions");
-        let forge_version_pairs = maven_metadata
-            .versions
-            .iter()
-            .flat_map(|(k, v)| v.iter().map(|lv| (k.clone(), lv.clone())))
-            .collect::<Vec<_>>();
-        let tasks = stream::iter(forge_version_pairs)
+        let remote_forge_version_pairs =
+            HashSet::<(String, String)>::from_iter(maven_metadata.versions.iter().flat_map(
+                |(mc_version, forge_version_list)| {
+                    forge_version_list
+                        .iter()
+                        .map(|forge_version| (mc_version.clone(), forge_version.clone()))
+                },
+            ));
+
+        let local_forge_index = local_storage.load_index()?;
+
+        let mut process_all = false;
+        let mut forge_index = if let Some(local_forge_index) = local_forge_index {
+            process_all = local_forge_index.versions.is_empty();
+            DerivedForgeIndex {
+                versions: local_forge_index.versions.clone(),
+                by_mc_version: local_forge_index.by_mc_version.clone(),
+            }
+        } else {
+            DerivedForgeIndex::default()
+        };
+
+        // update recomendations for local versions
+        for (long_version, forge_version) in forge_index.versions.iter_mut() {
+            let is_recommended = recommended_set.contains(&forge_version.version);
+            forge_version.recommended = Some(is_recommended);
+
+            if is_recommended {
+                forge_index
+                    .by_mc_version
+                    .get_mut(&forge_version.mc_version)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Missing forge info for minecraft version {}",
+                            &forge_version.mc_version
+                        )
+                    })
+                    .recommended = Some(long_version.clone());
+            }
+        }
+
+        let pending_forge_version_pairs = match local_storage.load_maven_metadata()? {
+            Some(local_maven_metadata) if !process_all => {
+                let local_forge_version_pairs = HashSet::<(String, String)>::from_iter(
+                    local_maven_metadata.versions.iter().flat_map(
+                        |(mc_version, forge_version_list)| {
+                            forge_version_list
+                                .iter()
+                                .map(|forge_version| (mc_version.clone(), forge_version.clone()))
+                        },
+                    ),
+                );
+                let diff = remote_forge_version_pairs
+                    .difference(&local_forge_version_pairs)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if !diff.is_empty() {
+                    info!(
+                        "Missing local forge versions: {:?}",
+                        diff.iter().map(|(_, lv)| lv).collect::<Vec<_>>()
+                    );
+                }
+                diff
+            }
+            _ => {
+                info!("Local forge metadata does not exist, fetching all versions");
+                remote_forge_version_pairs.into_iter().collect::<Vec<_>>()
+            }
+        };
+        let tasks = stream::iter(pending_forge_version_pairs)
             .map(|(mc_version, long_version)| {
                 let version_expression = regex::Regex::new(
                     "^(?P<mc>[0-9a-zA-Z_\\.]+)-(?P<ver>[0-9\\.]+\\.(?P<build>[0-9]+))(-(?P<branch>[a-zA-Z0-9\\.]+))?$"
@@ -712,15 +774,15 @@ impl UpstreamMetadataUpdater {
         for forge_version in forge_versions {
             let mc_version = forge_version.mc_version.clone();
             let long_version = forge_version.long_version.clone();
-            new_index
+            forge_index
                 .versions
                 .insert(forge_version.long_version.clone(), forge_version.clone());
-            if !new_index.by_mc_version.contains_key(&mc_version) {
-                new_index
+            if !forge_index.by_mc_version.contains_key(&mc_version) {
+                forge_index
                     .by_mc_version
                     .insert(mc_version.clone(), ForgeMCVersionInfo::default());
             }
-            new_index
+            forge_index
                 .by_mc_version
                 .get_mut(&mc_version)
                 .unwrap_or_else(|| {
@@ -733,7 +795,7 @@ impl UpstreamMetadataUpdater {
             //     new_index.by_mc_version[&mc_version].latest = Some(long_version.clone());
             // }
             if let Some(true) = forge_version.recommended {
-                new_index
+                forge_index
                     .by_mc_version
                     .get_mut(&mc_version)
                     .unwrap_or_else(|| {
@@ -745,7 +807,7 @@ impl UpstreamMetadataUpdater {
 
         debug!("Post-processing forge promotions and adding missing 'latest'");
 
-        for (mc_version, info) in &mut new_index.by_mc_version {
+        for (mc_version, info) in forge_index.by_mc_version.iter_mut() {
             let latest_version = info.versions.last().unwrap_or_else(|| {
                 panic!("No forge versions for minecraft version {}", mc_version)
             });
@@ -756,7 +818,7 @@ impl UpstreamMetadataUpdater {
         debug!("Dumping forge index files");
         local_storage.store_maven_metadata(&maven_metadata)?;
         local_storage.store_forge_promotions(&promotions_metadata)?;
-        local_storage.store_index(&new_index)?;
+        local_storage.store_index(&forge_index)?;
 
         Ok(())
     }

@@ -222,8 +222,7 @@ impl UpstreamMetadataUpdater {
             diff.append(&mut out_of_date);
             diff
         } else {
-            info!("Local Mojang metadata does not exist, saving it");
-            local_storage.store_manifest(&remote_manifest)?;
+            info!("Local Mojang metadata does not exist, fetching all versions");
 
             remote_ids.into_iter().map(|id| (id, true)).collect()
         };
@@ -257,6 +256,9 @@ impl UpstreamMetadataUpdater {
             .collect::<Vec<_>>()
             .await;
         process_results(results)?;
+
+        // update the locally stored manifest
+        local_storage.store_manifest(&remote_manifest)?;
         Ok(())
     }
 
