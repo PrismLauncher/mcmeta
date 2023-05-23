@@ -659,9 +659,7 @@ impl UpstreamMetadataUpdater {
 
         let local_forge_index = local_storage.load_index()?;
 
-        let mut process_all = false;
         let mut forge_index = if let Some(local_forge_index) = local_forge_index {
-            process_all = local_forge_index.versions.is_empty();
             DerivedForgeIndex {
                 versions: local_forge_index.versions.clone(),
                 by_mc_version: local_forge_index.by_mc_version.clone(),
@@ -670,52 +668,44 @@ impl UpstreamMetadataUpdater {
             DerivedForgeIndex::default()
         };
 
-        // update recomendations for local versions
-        for (long_version, forge_version) in forge_index.versions.iter_mut() {
-            let is_recommended = recommended_set.contains(&forge_version.version);
-            forge_version.recommended = Some(is_recommended);
+        // update recomendations for local versions, collect local versions
+        let local_index_versions =
+            HashSet::<(String, String)>::from_iter(forge_index.versions.iter_mut().map(
+                |(long_version, forge_version)| {
+                    let is_recommended = recommended_set.contains(&forge_version.version);
+                    forge_version.recommended = Some(is_recommended);
 
-            if is_recommended {
-                forge_index
-                    .by_mc_version
-                    .get_mut(&forge_version.mc_version)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Missing forge info for minecraft version {}",
-                            &forge_version.mc_version
-                        )
-                    })
-                    .recommended = Some(long_version.clone());
-            }
-        }
+                    if is_recommended {
+                        forge_index
+                            .by_mc_version
+                            .get_mut(&forge_version.mc_version)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Missing forge info for minecraft version {}",
+                                    &forge_version.mc_version
+                                )
+                            })
+                            .recommended = Some(long_version.clone());
+                    }
+                    (forge_version.mc_version.clone(), long_version.clone())
+                },
+            ));
 
-        let pending_forge_version_pairs = match local_storage.load_maven_metadata()? {
-            Some(local_maven_metadata) if !process_all => {
-                let local_forge_version_pairs = HashSet::<(String, String)>::from_iter(
-                    local_maven_metadata.versions.iter().flat_map(
-                        |(mc_version, forge_version_list)| {
-                            forge_version_list
-                                .iter()
-                                .map(|forge_version| (mc_version.clone(), forge_version.clone()))
-                        },
-                    ),
+        let pending_forge_version_pairs = if !local_index_versions.is_empty() {
+            let diff = remote_forge_version_pairs
+                .difference(&local_index_versions)
+                .cloned()
+                .collect::<Vec<_>>();
+            if !diff.is_empty() {
+                info!(
+                    "Missing local forge versions: {:?}",
+                    diff.iter().map(|(_, lv)| lv).collect::<Vec<_>>()
                 );
-                let diff = remote_forge_version_pairs
-                    .difference(&local_forge_version_pairs)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                if !diff.is_empty() {
-                    info!(
-                        "Missing local forge versions: {:?}",
-                        diff.iter().map(|(_, lv)| lv).collect::<Vec<_>>()
-                    );
-                }
-                diff
             }
-            _ => {
-                info!("Local forge metadata does not exist, fetching all versions");
-                remote_forge_version_pairs.into_iter().collect::<Vec<_>>()
-            }
+            diff
+        } else {
+            info!("Local forge metadata does not exist, fetching all versions");
+            remote_forge_version_pairs.into_iter().collect::<Vec<_>>()
         };
         let tasks = stream::iter(pending_forge_version_pairs)
             .map(|(mc_version, long_version)| {
