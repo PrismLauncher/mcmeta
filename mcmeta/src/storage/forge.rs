@@ -662,7 +662,7 @@ impl UpstreamMetadataUpdater {
         let mut forge_index = if let Some(local_forge_index) = local_forge_index {
             DerivedForgeIndex {
                 versions: local_forge_index.versions.clone(),
-                by_mc_version: local_forge_index.by_mc_version.clone(),
+                by_mc_version: local_forge_index.by_mc_version,
             }
         } else {
             DerivedForgeIndex::default()
@@ -936,7 +936,7 @@ async fn process_forge_version(
     version: &str,
     branch: Option<String>,
 ) -> Result<ForgeEntry> {
-    let files = get_single_forge_files_manifest(&local_storage, long_version).await?;
+    let files = get_single_forge_files_manifest(local_storage, long_version).await?;
 
     let is_recommended = recommended_set.contains(version);
 
@@ -958,7 +958,7 @@ async fn get_single_forge_files_manifest(
     local_storage: &ForgeDataStorage,
     long_version: &str,
 ) -> Result<BTreeMap<String, ForgeFile>> {
-    let files_manifest = local_storage.load_files_manifest(&long_version)?;
+    let files_manifest = local_storage.load_files_manifest(long_version)?;
     let files_metadata = if let Some(files_manifest) = files_manifest {
         info!("Forge manifest for {long_version} stored localy");
         files_manifest
@@ -972,7 +972,7 @@ async fn get_single_forge_files_manifest(
         let remote_manifest = download::forge::load_single_forge_files_manifest(&file_url)
             .await
             .with_context(|| format!("Failure downloading {}", &file_url))?;
-        local_storage.store_files_manifest(&long_version, &remote_manifest)?;
+        local_storage.store_files_manifest(long_version, &remote_manifest)?;
         remote_manifest
     };
 
