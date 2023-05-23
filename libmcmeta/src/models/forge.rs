@@ -33,6 +33,7 @@ pub struct ForgeVersionClassifier {
     pub stash: Option<String>,
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
 pub enum ForgeVersionClassifierExtensions {
     Txt,
     Zip,
@@ -692,7 +693,7 @@ pub struct ForgeOptional {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
-pub struct ForgeInstallerProfile {
+pub struct ForgeInstallerProfileV1 {
     pub install: ForgeInstallerProfileInstallSection,
     #[serde(rename = "versionInfo")]
     pub version_info: ForgeVersionFile,
@@ -776,6 +777,13 @@ pub struct ForgeInstallerProfileV2 {
     #[serde(rename = "erverJarPath")]
     #[merge(strategy = merge::option::overwrite_some)]
     server_jar_path: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Validate)]
+#[serde(untagged)]
+pub enum ForgeInstallerProfile {
+    V1(Box<ForgeInstallerProfileV1>),
+    V2(Box<ForgeInstallerProfileV2>),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]

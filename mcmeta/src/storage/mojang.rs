@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(Clone)]
-struct MojangDataStorage {
+pub struct MojangDataStorage {
     storage_format: Arc<StorageFormat>,
 }
 
@@ -75,7 +75,12 @@ impl MojangDataStorage {
                 let local_manifest_path = self.meta_dir()?.join("version_manifest_v2.json");
                 if local_manifest_path.is_file() {
                     let local_manifest = serde_json::from_str::<MojangVersionManifest>(
-                        &std::fs::read_to_string(&local_manifest_path)?,
+                        &std::fs::read_to_string(&local_manifest_path).with_context(|| {
+                            format!(
+                                "Failure reading file {}",
+                                &local_manifest_path.to_string_lossy()
+                            )
+                        })?,
                     )?;
                     Ok(Some(local_manifest))
                 } else {
@@ -94,7 +99,12 @@ impl MojangDataStorage {
             } => {
                 let local_manifest_path = self.meta_dir()?.join("version_manifest_v2.json");
                 let manifest_json = serde_json::to_string_pretty(&manifest)?;
-                std::fs::write(&local_manifest_path, manifest_json)?;
+                std::fs::write(&local_manifest_path, manifest_json).with_context(|| {
+                    format!(
+                        "Failure writing file {}",
+                        local_manifest_path.to_string_lossy()
+                    )
+                })?;
                 Ok(())
             }
             StorageFormat::Database => todo!(),
@@ -110,7 +120,9 @@ impl MojangDataStorage {
                 let version_file = self.versions_dir()?.join(format!("{}.json", id));
                 if version_file.is_file() {
                     let version = serde_json::from_str::<MinecraftVersion>(
-                        &std::fs::read_to_string(&version_file)?,
+                        &std::fs::read_to_string(&version_file).with_context(|| {
+                            format!("Failure reading file {}", version_file.to_string_lossy())
+                        })?,
                     )?;
                     Ok(Some(version))
                 } else {
@@ -129,7 +141,9 @@ impl MojangDataStorage {
             } => {
                 let version_file = self.versions_dir()?.join(format!("{}.json", version.id));
                 let version_manifest_json = serde_json::to_string_pretty(&version)?;
-                std::fs::write(&version_file, version_manifest_json)?;
+                std::fs::write(&version_file, version_manifest_json).with_context(|| {
+                    format!("Failure writing file {}", version_file.to_string_lossy())
+                })?;
             }
             StorageFormat::Database => todo!(),
         }

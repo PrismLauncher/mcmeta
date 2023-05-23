@@ -199,6 +199,27 @@ pub fn filehash(path: &std::path::PathBuf, algo: HashAlgo) -> Result<String> {
     }
 }
 
+pub fn hash(data: impl AsRef<[u8]>, algo: HashAlgo) -> Result<String> {
+    match algo {
+        HashAlgo::Sha1 => {
+            use sha1::{Digest, Sha1};
+
+            let mut hasher = Sha1::new();
+            hasher.update(data);
+            let hash_bytes = hasher.finalize();
+            Ok(format!("{:X}", hash_bytes))
+        }
+        HashAlgo::Sha256 => {
+            use sha2::{Digest, Sha256};
+
+            let mut hasher = Sha256::new();
+            hasher.update(data);
+            let hash_bytes = hasher.finalize();
+            Ok(format!("{:X}", hash_bytes))
+        }
+    }
+}
+
 /**
 * Process a `Vec<Result<T>>` int a `Result<Vec<T>>` concatenating any error messages encountered
 */
@@ -220,4 +241,11 @@ pub fn process_results<T>(results: Vec<Result<T>>) -> Result<Vec<T>> {
     } else {
         Ok(ok_results)
     }
+}
+
+pub fn process_results_ok<T>(results: Vec<Result<T>>) -> Vec<T> {
+    results
+        .into_iter()
+        .filter_map(|res: Result<T>| res.ok())
+        .collect()
 }

@@ -26,13 +26,12 @@ impl StorageFormat {
                     );
                     std::fs::create_dir_all(metadata_dir)?;
                 }
-
-                updater.initialize_mojang_metadata().await?;
-
-                forge::initialize_forge_metadata(self, metadata_cfg).await?;
             }
             StorageFormat::Database => todo!(),
         }
+
+        updater.initialize_mojang_metadata().await?;
+        updater.initialize_forge_metadata().await?;
 
         Ok(())
     }
