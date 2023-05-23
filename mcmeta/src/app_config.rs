@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum StorageFormat {
     Json {
@@ -11,7 +11,7 @@ pub enum StorageFormat {
     Database,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct MetadataConfig {
     pub max_parallel_fetch_connections: usize,
     pub static_directory: String,
@@ -46,9 +46,9 @@ impl ServerConfig {
             .set_default("debug_log.path", "./logs")?
             .set_default("debug_log.prefix", "mcmeta.log")?
             .set_default("debug_log.level", "debug")?
-            // optionaly oad config from a file. this is optional though
+            // optionally add config from a file. this is optional though
             .add_source(config::File::from(std::path::Path::new(path)).required(false))
-            // envierment overrides file
+            // environment overrides file
             .add_source(config::Environment::with_prefix("mcmeta").separator("__"))
             .build()?;
 

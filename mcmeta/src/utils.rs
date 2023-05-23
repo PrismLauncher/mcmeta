@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 fn json_matching_brace(c: char) -> char {
     match c {
@@ -12,7 +12,7 @@ fn json_matching_brace(c: char) -> char {
 
 /**
  * Attempts to read a complete json object at the error location from the provide body
- * to provided context to a deserialisation error. only usefull if the error was caused
+ * to provided context to a deserialisation error. only useful if the error was caused
  * by a data mismatch not a syntax error or EOF.
  */
 #[allow(dead_code)]
@@ -88,7 +88,7 @@ pub fn get_json_context(err: &serde_json::Error, body: &str, max_len: usize) -> 
 
 /**
  * Attempts to read a complete json object just before the error location from the provide body
- * to provided context to a deserialisation error. only usefull if the error was caused
+ * to provided context to a deserialisation error. only useful if the error was caused
  * by a data mismatch not a syntax error or EOF.
  */
 pub fn get_json_context_back(err: &serde_json::Error, body: &str, max_len: usize) -> String {
@@ -196,5 +196,28 @@ pub fn filehash(path: &std::path::PathBuf, algo: HashAlgo) -> Result<String> {
             let hash_bytes = hasher.finalize();
             Ok(format!("{:X}", hash_bytes))
         }
+    }
+}
+
+/**
+* Process a `Vec<Result<T>>` int a `Result<Vec<T>>` concatenating any error messages encountered
+*/
+pub fn process_results<T>(results: Vec<Result<T>>) -> Result<Vec<T>> {
+    let mut ok_results = vec![];
+    let mut err_msgs = vec![];
+    for res in results {
+        if let Ok(ok_res) = res {
+            ok_results.push(ok_res);
+        } else {
+            err_msgs.push(format!("\n{:?}", res.err().unwrap()));
+        }
+    }
+    if !err_msgs.is_empty() {
+        Err(anyhow!(
+            "There were errors in the results:\n{:?}",
+            err_msgs.join("\n")
+        ))
+    } else {
+        Ok(ok_results)
     }
 }
