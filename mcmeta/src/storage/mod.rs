@@ -8,7 +8,7 @@ mod forge;
 mod mojang;
 
 impl StorageFormat {
-    pub async fn initialize_metadata(&self, metadata_cfg: &MetadataConfig) -> Result<()> {
+    pub async fn update_upstream_metadata(&self, metadata_cfg: &MetadataConfig) -> Result<()> {
         let updater = UpstreamMetadataUpdater {
             storage_format: Arc::new(self.clone()),
             metadata_cfg: Arc::new(metadata_cfg.clone()),
@@ -30,8 +30,8 @@ impl StorageFormat {
             StorageFormat::Database => todo!(),
         }
 
-        updater.initialize_mojang_metadata().await?;
-        updater.initialize_forge_metadata().await?;
+        updater.update_mojang_metadata().await?;
+        updater.update_forge_metadata().await?;
 
         Ok(())
     }

@@ -152,7 +152,7 @@ impl MojangDataStorage {
 }
 
 impl UpstreamMetadataUpdater {
-    pub async fn initialize_mojang_metadata(&self) -> Result<()> {
+    pub async fn update_upstream_mojang(&self) -> Result<()> {
         info!("Checking for Mojang metadata");
 
         self.update_mojang_metadata()
@@ -262,7 +262,7 @@ impl UpstreamMetadataUpdater {
         Ok(())
     }
 
-    async fn update_mojang_static_metadata(&self) -> Result<()> {
+    pub async fn update_mojang_static_metadata(&self) -> Result<()> {
         let local_storage = MojangDataStorage {
             storage_format: self.storage_format.clone(),
         };

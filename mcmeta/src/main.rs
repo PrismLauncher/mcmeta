@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
 
     config
         .storage_format
-        .initialize_metadata(&config.metadata)
+        .update_upstream_metadata(&config.metadata)
         .await?;
 
     let raw_mojang_routes = Router::new()

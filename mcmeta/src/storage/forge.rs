@@ -579,7 +579,7 @@ impl ForgeDataStorage {
 }
 
 impl UpstreamMetadataUpdater {
-    pub async fn initialize_forge_metadata(&self) -> Result<()> {
+    pub async fn update_upstream_forge(&self) -> Result<()> {
         info!("Checking for Forge metadata");
         self.update_forge_metadata()
             .await
@@ -668,7 +668,7 @@ impl UpstreamMetadataUpdater {
             DerivedForgeIndex::default()
         };
 
-        // update recomendations for local versions, collect local versions
+        // update recommendations for local versions, collect local versions
         let local_index_versions =
             HashSet::<(String, String)>::from_iter(forge_index.versions.iter_mut().map(
                 |(long_version, forge_version)| {
