@@ -211,14 +211,12 @@ impl UpstreamMetadataUpdater {
                         .get(id)
                         .expect("local version to exist locally");
                     if remote_version.time > local_version.time {
-                        Some(id)
+                        Some((id.clone(), true))
                     } else {
                         None
                     }
                 })
-                .cloned()
-                .map(|id| (id, true))
-                .collect();
+                .collect::<Vec<_>>();
             diff.append(&mut out_of_date);
             diff
         } else {
