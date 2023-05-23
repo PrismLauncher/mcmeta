@@ -767,7 +767,20 @@ impl UpstreamMetadataUpdater {
         };
 
         let static_dir = std::path::Path::new(&self.metadata_cfg.static_directory);
-        let legacy_info_path = static_dir.join("forge").join("forge-legacyinfo.json");
+        let forge_static_dir = static_dir.join("forge");
+        if !forge_static_dir.is_dir() {
+            info!(
+                "Forge static metadata directory at {} does not exist, creating it",
+                &forge_static_dir.to_string_lossy()
+            );
+            std::fs::create_dir_all(&forge_static_dir).with_context(|| {
+                format!(
+                    "Failed to create forge static dir {}",
+                    &forge_static_dir.to_string_lossy()
+                )
+            })?;
+        }
+        let legacy_info_path = forge_static_dir.join("forge-legacyinfo.json");
         let aquire_legacy_info = !legacy_info_path.is_file();
 
         let mut legacy_info_list = ForgeLegacyInfoList::default();
