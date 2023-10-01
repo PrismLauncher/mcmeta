@@ -11,3 +11,6 @@ meta
 # dev envierment
 /.helix
 /.vscode
+
+# let this be self generated
+mcmeta/static/forge/forge-legacyinfo.json
