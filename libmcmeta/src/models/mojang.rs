@@ -56,11 +56,9 @@ pub struct MojangVersionManifestVersion {
     /// The URL to the version's JSON.
     pub url: String,
     /// The time the version was last updated.
-    #[serde(with = "time::serde::iso8601")]
-    pub time: time::OffsetDateTime,
+    pub time: chrono::DateTime<chrono::Utc>,
     /// The time the version was released.
-    #[serde(with = "time::serde::iso8601")]
-    pub release_time: time::OffsetDateTime,
+    pub release_time: chrono::DateTime<chrono::Utc>,
     /// Compliance level
     pub compliance_level: i32,
     /// The sha1 hash of the version's JSON.
@@ -355,8 +353,7 @@ pub struct OldSnapshotIndex {
 pub struct LegacyOverrideEntry {
     main_class: Option<String>,
     applet_class: Option<String>,
-    #[serde(with = "time::serde::iso8601::option")]
-    pub release_time: Option<time::OffsetDateTime>,
+    pub release_time: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(rename = "+traits")]
     additional_traits: Option<Vec<String>>,
     #[serde(rename = "+jvmArgs")]
@@ -484,7 +481,7 @@ pub struct MojangLogging {
 fn mojang_logging_validate_type(
     logging_type: &String,
 ) -> Result<(), serde_valid::validation::Error> {
-    let valid_logging_types = vec!["log4j2-xml"];
+    let valid_logging_types = ["log4j2-xml"];
     if !valid_logging_types.contains(&logging_type.as_str()) {
         Err(serde_valid::validation::Error::Custom(format!(
             "invalid log type: {}",
@@ -498,7 +495,7 @@ fn mojang_logging_validate_type(
 #[derive(Deserialize, Serialize, Debug, Clone, Validate)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangVersion {
-    #[serde(rename = "_comment_")]
+    #[serde(rename = "_comment_", alias = "_comment", alias = "comment")]
     pub comment: Option<Vec<String>>,
     pub id: String, // TODO: optional?
     pub arguments: Option<MojangArguments>,
@@ -512,10 +509,8 @@ pub struct MojangVersion {
     pub minecraft_arguments: Option<String>,
     #[validate(custom(mojang_version_validate_minimum_launcher_version))]
     pub minimum_launcher_version: Option<i32>,
-    #[serde(with = "time::serde::iso8601::option")]
-    pub release_time: Option<time::OffsetDateTime>,
-    #[serde(with = "time::serde::iso8601::option")]
-    pub time: Option<time::OffsetDateTime>,
+    pub release_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub time: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(rename = "type")]
     pub version_type: Option<String>,
     pub inherits_from: Option<String>,
@@ -563,7 +558,7 @@ impl MojangVersion {
             let downloads = self.downloads.clone().expect("Missing downloads");
             let client_download = downloads
                 .get("client")
-                .expect("Missing `client` in downlods");
+                .expect("Missing `client` in downloads");
             let artifact = MojangArtifact {
                 url: client_download.url.clone(),
                 sha1: client_download.sha1.clone(),
