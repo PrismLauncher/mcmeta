@@ -1,68 +1,32 @@
-use axum::{extract::Path, response::IntoResponse, Extension};
+use axum::{
+    extract::{Path, State},
+    response::IntoResponse,
+};
 use libmcmeta::models::mojang::{MinecraftVersion, MojangVersionManifest};
 use std::sync::Arc;
+use tracing::instrument;
 
-use crate::app_config::{ServerConfig, StorageFormat};
-use crate::routes::APIResponse;
+use crate::storage::Storage;
 
-pub async fn raw_mojang_manifest(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json {
-            meta_directory,
-            generated_directory: _,
-        } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let mojang_meta_dir = metadata_dir.join("mojang");
-            let local_manifest = mojang_meta_dir.join("version_manifest_v2.json");
-            let manifest = serde_json::from_str::<MojangVersionManifest>(
-                &std::fs::read_to_string(local_manifest).unwrap(),
-            )
-            .unwrap();
+use super::{into_api_axum_responce, ServerState};
 
-            axum::Json(APIResponse {
-                data: Some(manifest),
-                error: None,
-            })
-        }
-        StorageFormat::Database => todo!(),
-    }
+#[instrument]
+pub async fn raw_mojang_manifest(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    let manifest = state
+        .upstream_storage
+        .fetch_record::<MojangVersionManifest>(["mojang"], "version_manifest_v2")
+        .await;
+    into_api_axum_responce(manifest, "Version manifest not found")
 }
 
+#[instrument]
 pub async fn raw_mojang_version(
-    config: Extension<Arc<ServerConfig>>,
+    State(state): State<Arc<ServerState>>,
     Path(version): Path<String>,
 ) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json {
-            meta_directory,
-            generated_directory: _,
-        } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let mojang_meta_dir = metadata_dir.join("mojang");
-            let versions_dir = mojang_meta_dir.join("versions");
-            let version_file = versions_dir.join(format!("{}.json", version));
-            if !version_file.exists() {
-                return (
-                    axum::http::StatusCode::NOT_FOUND,
-                    axum::Json(APIResponse {
-                        data: None,
-                        error: Some(format!("Version {} does not exist", version)),
-                    }),
-                );
-            }
-            let manifest = serde_json::from_str::<MinecraftVersion>(
-                &std::fs::read_to_string(&version_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
+    let result = state
+        .upstream_storage
+        .fetch_record::<MinecraftVersion>(["mojang", "versions"], &version)
+        .await;
+    into_api_axum_responce(result, format!("Version {} does not exits", &version))
 }

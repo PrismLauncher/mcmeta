@@ -1,5 +1,6 @@
 [workspace]
-members = [
-	"libmcmeta",
-	"mcmeta"
-]
+members = ["libmcmeta", "mcmeta"]
+resolver = "2"
+
+[profile.dev.package.backtrace]
+opt-level = 3

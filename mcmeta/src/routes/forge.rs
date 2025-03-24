@@ -1,180 +1,68 @@
 use std::sync::Arc;
 
-use axum::{extract::Path, response::IntoResponse, Extension};
+use axum::extract::State;
+use axum::{extract::Path, response::IntoResponse};
 
 use libmcmeta::models::forge::{
     ForgeInstallerManifestVersion, ForgeMavenMetadata, ForgeMavenPromotions, ForgeVersion,
     ForgeVersionMeta,
 };
+use tracing::instrument;
 
-use crate::app_config::{ServerConfig, StorageFormat};
-use crate::routes::APIResponse;
+use crate::storage::Storage;
 
-pub async fn raw_forge_maven_meta(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json {
-            meta_directory,
-            generated_directory: _,
-        } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let maven_meta_file = forge_meta_dir.join("maven-metadata.json");
-            let manifest = serde_json::from_str::<ForgeMavenMetadata>(
-                &std::fs::read_to_string(maven_meta_file).unwrap(),
-            )
-            .unwrap();
+use super::{into_api_axum_responce, ServerState};
 
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
+#[instrument]
+pub async fn raw_forge_maven_meta(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    let result = state
+        .upstream_storage
+        .fetch_record::<ForgeMavenMetadata>(["forge"], "maven-metadata")
+        .await;
+    into_api_axum_responce(result, "sorge Maven metadata not found")
 }
 
-pub async fn raw_forge_promotions(config: Extension<Arc<ServerConfig>>) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json {
-            meta_directory,
-            generated_directory: _,
-        } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let promotions_file = forge_meta_dir.join("promotions_slim.json");
-            let manifest = serde_json::from_str::<ForgeMavenPromotions>(
-                &std::fs::read_to_string(promotions_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
+#[instrument]
+pub async fn raw_forge_promotions(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    let result = state
+        .upstream_storage
+        .fetch_record::<ForgeMavenPromotions>(["forge"], "promotions_slim")
+        .await;
+    into_api_axum_responce(result, "Forge Maven Promotions data not found")
 }
 
+#[instrument]
 pub async fn raw_forge_version(
-    config: Extension<Arc<ServerConfig>>,
+    State(state): State<Arc<ServerState>>,
     Path(version): Path<String>,
 ) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json {
-            meta_directory,
-            generated_directory: _,
-        } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let versions_dir = forge_meta_dir.join("version_manifests");
-            let version_file = versions_dir.join(format!("{}.json", version));
-            if !version_file.exists() {
-                return (
-                    axum::http::StatusCode::NOT_FOUND,
-                    axum::Json(APIResponse {
-                        data: None,
-                        error: Some(format!("Version {} does not exist", version)),
-                    }),
-                );
-            }
-            let manifest = serde_json::from_str::<ForgeVersion>(
-                &std::fs::read_to_string(&version_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
+    let result = state
+        .upstream_storage
+        .fetch_record::<ForgeVersion>(["forge", "version_manifests"], &version)
+        .await;
+    into_api_axum_responce(result, format!("Version {} does not exist", version))
 }
 
+#[instrument]
 pub async fn raw_forge_version_meta(
-    config: Extension<Arc<ServerConfig>>,
+    State(state): State<Arc<ServerState>>,
     Path(version): Path<String>,
 ) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json {
-            meta_directory,
-            generated_directory: _,
-        } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let versions_dir = forge_meta_dir.join("files_manifests");
-            let version_file = versions_dir.join(format!("{}.json", version));
-            if !version_file.exists() {
-                return (
-                    axum::http::StatusCode::NOT_FOUND,
-                    axum::Json(APIResponse {
-                        data: None,
-                        error: Some(format!("Version {} does not exist", version)),
-                    }),
-                );
-            }
-            let manifest = serde_json::from_str::<ForgeVersionMeta>(
-                &std::fs::read_to_string(&version_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
+    let result = state
+        .upstream_storage
+        .fetch_record::<ForgeVersionMeta>(["forge", "files_manifests"], &version)
+        .await;
+    into_api_axum_responce(result, format!("Version {} does not exist", version))
 }
 
+#[instrument]
 pub async fn raw_forge_version_installer(
-    config: Extension<Arc<ServerConfig>>,
+    State(state): State<Arc<ServerState>>,
     Path(version): Path<String>,
 ) -> impl IntoResponse {
-    match &config.storage_format {
-        StorageFormat::Json {
-            meta_directory,
-            generated_directory: _,
-        } => {
-            let metadata_dir = std::path::Path::new(meta_directory);
-            let forge_meta_dir = metadata_dir.join("forge");
-            let versions_dir = forge_meta_dir.join("installer_manifests");
-            let version_file = versions_dir.join(format!("{}.json", version));
-            if !version_file.exists() {
-                return (
-                    axum::http::StatusCode::NOT_FOUND,
-                    axum::Json(APIResponse {
-                        data: None,
-                        error: Some(format!("Version {} does not exist", version)),
-                    }),
-                );
-            }
-            let manifest = serde_json::from_str::<ForgeInstallerManifestVersion>(
-                &std::fs::read_to_string(&version_file).unwrap(),
-            )
-            .unwrap();
-
-            (
-                axum::http::StatusCode::OK,
-                axum::Json(APIResponse {
-                    data: Some(manifest),
-                    error: None,
-                }),
-            )
-        }
-        StorageFormat::Database => todo!(),
-    }
+    let result = state
+        .upstream_storage
+        .fetch_record::<ForgeInstallerManifestVersion>(["forge", "installer_manifests"], &version)
+        .await;
+    into_api_axum_responce(result, format!("Version {} does not exist", version))
 }

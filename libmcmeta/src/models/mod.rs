@@ -1,6 +1,7 @@
 use core::ops::Deref;
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
+use serde_with::skip_serializing_none;
 use std::collections::HashMap;
 use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
@@ -69,7 +70,7 @@ impl GradleSpecifier {
 
     /// Returns `true` if the specifier is a LWJGL artifact.
     pub fn is_lwjgl(&self) -> bool {
-        vec![
+        [
             "org.lwjgl",
             "org.lwjgl.lwjgl",
             "net.java.jinput",
@@ -80,7 +81,7 @@ impl GradleSpecifier {
 
     /// Returns `true` if the specifier is a Log4j artifact.
     pub fn is_log4j(&self) -> bool {
-        vec!["org.apache.logging.log4j"].contains(&self.group.as_str())
+        ["org.apache.logging.log4j"].contains(&self.group.as_str())
     }
 }
 
@@ -274,7 +275,7 @@ pub struct OSRule {
 }
 
 fn os_rule_name_must_be_os(name: &String) -> Result<(), serde_valid::validation::Error> {
-    let valid_os_names = vec![
+    let valid_os_names = [
         "osx",
         "linux",
         "windows",
@@ -293,6 +294,7 @@ fn os_rule_name_must_be_os(name: &String) -> Result<(), serde_valid::validation:
     }
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangRule {
@@ -306,7 +308,7 @@ pub struct MojangRule {
 fn mojang_rule_action_must_be_allow_disallow(
     action: &String,
 ) -> Result<(), serde_valid::validation::Error> {
-    if !vec!["allow", "disallow"].contains(&action.as_str()) {
+    if !["allow", "disallow"].contains(&action.as_str()) {
         Err(serde_valid::validation::Error::Custom(format!(
             "`{}` not a valid action, must be `allow` or `disallow`",
             &action
@@ -331,6 +333,7 @@ impl Deref for MojangRules {
     }
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MojangLibrary {
@@ -346,6 +349,7 @@ pub struct MojangLibrary {
     pub rules: Option<MojangRules>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Library {
@@ -418,6 +422,7 @@ impl From<&Library> for MojangLibrary {
     }
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Dependency {
@@ -429,6 +434,7 @@ pub struct Dependency {
     pub suggests: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Clone, Validate, merge::Merge, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MetaVersion {
@@ -468,8 +474,7 @@ pub struct MetaVersion {
     #[merge(strategy = merge::option::overwrite_some)]
     pub minecraft_arguments: Option<String>,
     #[merge(strategy = merge::option::overwrite_some)]
-    #[serde(with = "time::serde::iso8601::option")]
-    pub release_time: Option<time::OffsetDateTime>,
+    pub release_time: Option<chrono::DateTime<chrono::Utc>>,
     #[merge(strategy = merge::option_vec::append_some)]
     pub compatible_java_majors: Option<Vec<i32>>,
     #[merge(strategy = merge::option_vec::append_some)]
@@ -483,10 +488,8 @@ pub struct MetaVersion {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct MetaMcIndexEntry {
-    #[serde(with = "time::serde::iso8601")]
-    pub update_time: time::OffsetDateTime,
-    pub path: String,
+pub struct MetaIndexEntry {
+    pub update_time: chrono::DateTime<chrono::Utc>,
     pub hash: String,
 }
 
@@ -505,7 +508,7 @@ pub mod merge {
     pub use merge::Merge;
     pub use merge::{bool, num, ord, vec};
 
-    /// generic overwrite stratagy
+    /// generic overwrite strategy
     pub fn overwrite<T>(left: &mut T, right: T) {
         *left = right
     }

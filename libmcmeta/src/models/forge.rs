@@ -105,6 +105,8 @@ pub struct ForgeVersionClassifiers {
     pub installer: Option<ForgeVersionClassifier>,
     pub mdk: Option<ForgeVersionClassifier>,
     pub universal: Option<ForgeVersionClassifier>,
+    #[serde(rename = "universal-srg")]
+    pub universal_srg: Option<ForgeVersionClassifier>,
     pub userdev: Option<ForgeVersionClassifier>,
     pub sources: Option<ForgeVersionClassifier>,
     pub javadoc: Option<ForgeVersionClassifier>,
@@ -115,6 +117,7 @@ pub struct ForgeVersionClassifiers {
     pub userdev3: Option<ForgeVersionClassifier>,
     #[serde(rename = "src.zip")]
     pub src_zip: Option<ForgeVersionClassifier>,
+    pub shim: Option<ForgeVersionClassifier>,
 }
 
 pub enum ForgeVersionClassifierNames {
@@ -301,7 +304,7 @@ pub struct ForgeVersionLogging {
 #[skip_serializing_none]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ForgeVersion {
-    #[serde(rename = "_comment_")]
+    #[serde(rename = "_comment_", alias = "_comment", alias = "comment")]
     pub comment: Option<Vec<String>>,
     pub id: String,
     pub time: String,
@@ -425,7 +428,7 @@ pub struct ForgeLegacyLibrary {
 #[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyVersionInfo {
-    #[serde(rename = "_comment_")]
+    #[serde(rename = "_comment_", alias = "_comment", alias = "comment")]
     pub comment: Option<Vec<String>>,
     pub id: String,
     pub time: String,
@@ -461,7 +464,7 @@ pub struct ForgeLegacyOptional {
 #[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeLegacyInstallerManifest {
-    #[serde(rename = "_comment_")]
+    #[serde(rename = "_comment_", alias = "_comment", alias = "comment")]
     pub comment: Option<Vec<String>>,
     pub install: ForgeLegacyInstall,
     pub version_info: ForgeLegacyVersionInfo,
@@ -472,7 +475,7 @@ pub struct ForgeLegacyInstallerManifest {
 #[skip_serializing_none]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeInstallerManifest {
-    #[serde(rename = "_comment_")]
+    #[serde(rename = "_comment_", alias = "_comment", alias = "comment")]
     pub comment: Option<Vec<String>>,
     pub spec: u64,
     pub profile: String,
@@ -597,6 +600,7 @@ pub struct DerivedForgeIndex {
 ///     "modList":"none"
 /// },
 /// ```
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ForgeInstallerProfileInstallSection {
@@ -692,6 +696,7 @@ pub struct ForgeOptional {
     pub maven: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct ForgeInstallerProfileV1 {
     pub install: ForgeInstallerProfileInstallSection,
@@ -701,11 +706,11 @@ pub struct ForgeInstallerProfileV1 {
     pub optionals: Option<Vec<ForgeOptional>>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct ForgeLegacyInfo {
     #[merge(strategy = merge::option::overwrite_some)]
-    #[serde(rename = "releaseTime", with = "time::serde::iso8601::option")]
-    pub release_time: Option<time::OffsetDateTime>,
+    pub release_time: Option<chrono::DateTime<chrono::Utc>>,
     #[merge(strategy = merge::option::overwrite_some)]
     pub size: Option<u64>,
     #[merge(strategy = merge::option::overwrite_some)]
@@ -720,6 +725,7 @@ pub struct ForgeLegacyInfoList {
     pub number: HashMap<String, ForgeLegacyInfo>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct DataSpec {
     #[merge(strategy = merge::option::overwrite_some)]
@@ -728,6 +734,7 @@ pub struct DataSpec {
     server: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct ProcessorSpec {
     #[merge(strategy = merge::option::overwrite_some)]
@@ -742,6 +749,7 @@ pub struct ProcessorSpec {
     sides: Option<Vec<String>>,
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct ForgeInstallerProfileV2 {
     #[merge(skip)]
@@ -786,13 +794,16 @@ pub enum ForgeInstallerProfile {
     V2(Box<ForgeInstallerProfileV2>),
 }
 
+#[skip_serializing_none]
 #[derive(Deserialize, Serialize, Clone, Debug, Validate, Merge, Default)]
 pub struct InstallerInfo {
     pub sha1hash: Option<String>,
     pub sha256hash: Option<String>,
+    pub md5hash: Option<String>,
     pub size: Option<u64>,
 }
 
+#[derive(Clone, Debug)]
 pub struct ForgeProcessedVersion {
     pub build: i32,
     pub raw_version: String,
@@ -800,8 +811,10 @@ pub struct ForgeProcessedVersion {
     pub mc_version_sane: String,
     pub branch: Option<String>,
     pub installer_filename: Option<String>,
+    pub installer_file_hash: Option<String>,
     pub installer_url: Option<String>,
     pub universal_filename: Option<String>,
+    pub universal_file_hash: Option<String>,
     pub universal_url: Option<String>,
     pub changelog_url: Option<String>,
     pub long_version: String,
@@ -816,8 +829,10 @@ impl ForgeProcessedVersion {
             mc_version_sane: entry.mc_version.replacen("_pre", "-pre", 1),
             branch: entry.branch.clone(),
             installer_filename: None,
+            installer_file_hash: None,
             installer_url: None,
             universal_filename: None,
+            universal_file_hash: None,
             universal_url: None,
             changelog_url: None,
             long_version: format!("{}-{}", entry.mc_version, entry.version),
@@ -832,15 +847,18 @@ impl ForgeProcessedVersion {
                 let extension = &file.extension;
                 let filename = file.filename(&ver.long_version);
                 let url = file.url(&ver.long_version);
+                let hash = file.hash.clone();
 
                 if (classifier == "installer") && (extension == "jar") {
                     ver.installer_filename = Some(filename);
                     ver.installer_url = Some(url);
+                    ver.installer_file_hash = Some(hash)
                 } else if (classifier == "universal" || classifier == "client")
                     && (extension == "jar" || extension == "zip")
                 {
                     ver.universal_filename = Some(filename);
                     ver.universal_url = Some(url);
+                    ver.universal_file_hash = Some(hash);
                 } else if (classifier == "changelog") && (extension == "txt") {
                     ver.changelog_url = Some(url);
                 }
@@ -871,6 +889,22 @@ impl ForgeProcessedVersion {
             self.installer_url.clone()
         } else {
             self.universal_url.clone()
+        }
+    }
+
+    pub fn hash(&self) -> Option<String> {
+        if self.uses_installer() {
+            self.installer_file_hash.clone()
+        } else {
+            self.universal_file_hash.clone()
+        }
+    }
+
+    pub fn hash_match(&self, other: &Option<String>) -> bool {
+        let hash = self.hash();
+        match (hash, other) {
+            (Some(ours), Some(theirs)) => ours.to_uppercase() == theirs.to_uppercase(),
+            _ => false,
         }
     }
 
