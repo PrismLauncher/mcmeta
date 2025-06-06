@@ -1,3 +1,6 @@
+> [!NOTE]  
+> [Metabolism](https://github.com/PrismLauncher/metabolism) is the latest and most complete [meta](https://github.com/PrismLauncher/meta) reimplementation. This repo won't necessarily be archived, but you might want to check this out too.
+
 # Minecraft Metadata Server
 
 A server software designed for fetching Minecraft and Minecraft-related
